@@ -45,12 +45,20 @@ interface speaks both **English and 中文**.
 - Session restore — reopens your folder and tabs
 - Auto-refreshing file tree — watches the folder for external changes
 
-| Dark theme | Command palette |
-| --- | --- |
-| ![Dark theme](./docs/screenshots/theme_dark.png) | ![Command palette](./docs/screenshots/command_palette.png) |
+Command palette — fuzzy-jump to any file or command:
 
-Six polished themes (warm light/dark + four Morandi palettes), switchable with
-`Ctrl+Shift+T` or the status-bar picker.
+![Command palette](./docs/screenshots/command_palette.png)
+
+## Themes
+
+Six polished themes — warm light/dark plus four muted **Morandi** palettes —
+switchable with `Ctrl+Shift+T` or the status-bar picker.
+
+| Warm Light | Warm Dark | Morandi Dusk |
+| :---: | :---: | :---: |
+| ![Warm Light](./docs/screenshots/hero_light.png) | ![Warm Dark](./docs/screenshots/theme_dark.png) | ![Morandi Dusk](./docs/screenshots/theme_morandi_dusk.png) |
+| **Morandi Sage** | **Morandi Rose** | **Morandi Mist** |
+| ![Morandi Sage](./docs/screenshots/theme_morandi_sage.png) | ![Morandi Rose](./docs/screenshots/theme_morandi_rose.png) | ![Morandi Mist](./docs/screenshots/theme_morandi_mist.png) |
 
 ## Keyboard shortcuts
 
