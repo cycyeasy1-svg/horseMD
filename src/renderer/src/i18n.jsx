@@ -57,6 +57,8 @@ export const STRINGS = {
     'prompt.newFolder': 'New folder name',
     'prompt.newFolderDefault': 'New Folder',
     'confirm.trash': 'Move "{name}" to trash?',
+    'error.fileMissing': '"{name}" no longer exists — it may have been moved or deleted. Removed it from Recent.',
+    'error.openFailed': 'Could not open "{name}".',
     'err.createFile': 'Could not create file: ',
 
     // outline
@@ -147,6 +149,8 @@ export const STRINGS = {
     'prompt.newFolder': '新文件夹名',
     'prompt.newFolderDefault': '新建文件夹',
     'confirm.trash': '将“{name}”移到回收站？',
+    'error.fileMissing': '“{name}”已不存在——可能被移动或删除了。已从“最近打开”中移除。',
+    'error.openFailed': '无法打开“{name}”。',
     'err.createFile': '无法创建文件：',
 
     'outline.title': '大纲',

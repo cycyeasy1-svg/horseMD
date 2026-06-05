@@ -67,6 +67,10 @@ export default function App() {
   }, [theme])
 
   const t = useCallback((key, vars) => translate(lang, key, vars), [lang])
+  // Always-current translator for stable callbacks (e.g. openPaths) that must
+  // not be recreated on every language change.
+  const tRef = useRef(t)
+  tRef.current = t
   const cycleTheme = useCallback(() => {
     setTheme((cur) => {
       const i = THEMES.findIndex((x) => x.id === cur)
@@ -75,7 +79,7 @@ export default function App() {
   }, [])
 
   // --------------------------- open files --------------------------
-  const openPaths = useCallback(async (paths) => {
+  const openPaths = useCallback(async (paths, silent = false) => {
     if (!paths || !paths.length) return
     let lastId = null
     const seen = new Set()
@@ -123,7 +127,18 @@ export default function App() {
         setTabs((prev) => [...prev, newTab])
         remember(path)
       } catch (e) {
-        window.alert('Could not open file: ' + e.message)
+        // File was moved/deleted (e.g. a stale "recent" entry). Drop it from the
+        // recents list so the dead link disappears, and show a friendly message
+        // instead of the raw IPC error.
+        const missing = e?.message?.includes('ENOENT')
+        setRecents((prev) => prev.filter((r) => (r.path || '').replace(/\\/g, '/') !== norm))
+        // Startup restore skips missing files quietly; an explicit open (clicking
+        // a Recent, File > Open) still tells the user what happened.
+        if (!silent) {
+          window.alert(
+            tRef.current(missing ? 'error.fileMissing' : 'error.openFailed', { name: baseName(path) })
+          )
+        }
       }
     }
     if (lastId) setActiveId(lastId)
@@ -358,7 +373,9 @@ export default function App() {
 
   useEffect(() => {
     const paths = (session.openPaths || []).filter(Boolean)
-    if (paths.length) openPaths(paths).then(() => {
+    // Restore silently: skip files that were deleted/moved since last session
+    // without popping an error for each one.
+    if (paths.length) openPaths(paths, true).then(() => {
       if (session.activePath) {
         setTabs((prev) => {
           const t = prev.find((x) => x.path === session.activePath)
