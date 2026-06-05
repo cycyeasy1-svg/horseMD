@@ -6,6 +6,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-06-06
+
+### Fixed
+- New-file naming overwrote the input when typing digits (the name was reselected
+  on every keystroke) — the name is now preselected once.
+- Editor placeholder now follows a language switch live (was baked in at create).
+- Opening a moved/deleted file no longer dumps a raw IPC error — the dead entry
+  is removed from Recent with a friendly message; session restore skips missing
+  files silently.
+
 ## [0.1.1] - 2026-06-05
 
 ### Added
@@ -32,6 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 - Dark/light themes, session restore, single-instance file association.
 - Windows NSIS installer and macOS dmg/zip packaging.
 
-[Unreleased]: https://github.com/BND-1/horseMD/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/BND-1/horseMD/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/BND-1/horseMD/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/BND-1/horseMD/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/BND-1/horseMD/releases/tag/v0.1.0
