@@ -951,12 +951,13 @@ button:focus-visible,
   display: flex;
   align-items: center;
   gap: 14px;
-  min-width: 0;
-  flex-shrink: 0;
 }
-/* The path can be long → clip it (with ellipsis) inside the left cluster only.
-   The right cluster must stay visible so its popovers aren't clipped. */
-.status-left { overflow: hidden; }
+/* The path (left) absorbs all the shrinking and clips with an ellipsis; the
+   right-side controls (counts, source/theme/language toggles, GitHub) are a
+   fixed block, so narrowing the window collapses the path instead of hiding or
+   shifting the buttons. (overflow stays visible on the right so popovers show.) */
+.status-left { flex: 1 1 auto; min-width: 0; overflow: hidden; }
+.status-right { flex: 0 0 auto; margin-left: 16px; }
 .status-path {
   max-width: 45vw;
   overflow: hidden;
@@ -982,16 +983,15 @@ button:focus-visible,
   background: var(--hover);
   color: var(--text);
 }
-/* Hide less important status items when window is narrow */
+/* Right-side items never shrink; the path yields space instead. As a last resort
+   on very narrow windows, drop the word/char/read counts first — never the
+   toggles or the GitHub link. */
 .status-right > span,
 .status-right > .block-switch {
   flex-shrink: 0;
 }
-@media (max-width: 700px) {
+@media (max-width: 820px) {
   .status-right > span { display: none; }
-}
-@media (max-width: 500px) {
-  .status-right > .block-switch { display: none; }
 }
 
 /* =====================================================

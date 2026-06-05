@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.2] - 2026-06-06
 
+### Changed
+- Status bar now keeps the right-side controls (block/source toggles, theme,
+  language, GitHub) fixed and visible when the window narrows — the file path
+  collapses (ellipsis) instead of the buttons being hidden or pushed off-screen.
+
 ### Fixed
 - New-file naming overwrote the input when typing digits (the name was reselected
   on every keystroke) — the name is now preselected once.
