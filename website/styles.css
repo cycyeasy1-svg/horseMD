@@ -169,6 +169,13 @@ a:hover .arrow-pull { transform: translateY(2px); }
   text-align: center;
 }
 
+/* 规格表下的功能照 */
+.photo-sub {
+  max-width: none;
+  padding: 0;
+  margin-top: clamp(36px, 5vh, 52px);
+}
+
 /* hero 信息行 */
 .hero-strip {
   display: flex; flex-wrap: wrap; justify-content: center;
