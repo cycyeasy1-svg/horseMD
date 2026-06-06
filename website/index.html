@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width,initial-scale=1" />
   <script>document.documentElement.classList.add('js')</script>
   <title>HorseMD — 一个窗口，装下所有 Markdown</title>
-  <meta name="description" content="HorseMD：温暖安静的 Typora 风格 Markdown 编辑器。标签页 + 文件树 + 所见即所得，Windows 与 macOS，免费开源。" />
+  <meta name="description" content="HorseMD：免费开源的 Typora 平替。标签页 + 文件树 + 所见即所得，Windows 与 macOS。" />
   <meta name="keywords" content="HorseMD,Markdown 编辑器,Typora 替代,WYSIWYG,标签页,文件树,开源" />
   <link rel="icon" type="image/png" href="./assets/icon.png" />
 
@@ -13,7 +13,7 @@
   <meta property="og:type" content="website" />
   <meta property="og:site_name" content="HorseMD" />
   <meta property="og:title" content="HorseMD — One window. Every file." />
-  <meta property="og:description" content="A calm, Typora-style Markdown editor with tabs and a file-tree workspace. Free & open source, for Windows and macOS." />
+  <meta property="og:description" content="A free Typora alternative with tabs and a file-tree workspace. Open source, for Windows and macOS." />
   <meta property="og:image" content="./assets/hero_light.png" />
   <meta name="twitter:card" content="summary_large_image" />
 
@@ -28,52 +28,38 @@
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "license": "https://opensource.org/licenses/MIT",
     "downloadUrl": "https://github.com/BND-1/horseMD/releases/latest",
-    "description": "A calm, Typora-style Markdown editor with tabs and a file-tree workspace."
+    "description": "A free Typora alternative with tabs and a file-tree workspace."
   }
   </script>
 
-  <!-- Fonts: Instrument Serif（展示）+ Noto Serif/Sans SC（中文）+ Geist Mono（标注）
-       非阻塞加载：字体被墙 / 超时也不影响页面渲染，回退到系统字体栈 -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap"
-        rel="stylesheet" media="print" onload="this.media='all'">
-  <noscript>
-    <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Noto+Serif+SC:wght@500;600;700&family=Noto+Sans+SC:wght@400;500;600&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
-  </noscript>
-
+  <!-- 無印风：纯系统字体栈，无外部字体 -->
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
-  <div class="bg" aria-hidden="true">
-    <div class="bg-aurora"></div>
-    <div class="bg-grain"></div>
-  </div>
-  <div class="scroll-bar" aria-hidden="true"></div>
 
   <!-- ───────────── 顶部导航 ───────────── -->
-  <header class="nav hairline-b">
+  <header class="nav">
     <a class="nav-brand" href="#top" aria-label="HorseMD">
-      <img src="./assets/icon.png" alt="" width="26" height="26" />
+      <img src="./assets/icon.png" alt="" width="24" height="24" />
       <span class="brand-name">HorseMD</span>
-      <span class="brand-ver mono tabular" id="navVersion">v0.1.2</span>
+      <span class="brand-ver" id="navVersion">v0.1.2</span>
     </a>
-    <nav class="nav-links mono">
-      <a class="ul-link" href="#features" data-i18n="nav.features">特性</a>
-      <a class="ul-link" href="#themes" data-i18n="nav.themes">主题</a>
-      <a class="ul-link" href="https://github.com/BND-1/horseMD" target="_blank" rel="noopener">GitHub <span class="arrow-pull">↗</span></a>
+    <nav class="nav-links">
+      <a href="#features" data-i18n="nav.features">特性</a>
+      <a href="#themes" data-i18n="nav.themes">主题</a>
+      <a href="https://github.com/BND-1/horseMD" target="_blank" rel="noopener">GITHUB</a>
     </nav>
-    <button class="lang-toggle mono" id="langToggle" aria-label="Switch language">EN</button>
+    <button class="lang-toggle" id="langToggle" aria-label="Switch language">EN</button>
   </header>
 
   <main id="top">
 
-    <!-- ───────────── Hero：直接下载 ───────────── -->
+    <!-- ───────────── Hero ───────────── -->
     <section class="hero">
-      <p class="kicker mono reveal" data-i18n="hero.kicker">免费 · 开源 · 不要账号</p>
+      <p class="kicker label reveal" data-i18n="hero.kicker">免费 · 开源 · 不要账号</p>
       <h1 class="hero-title">
         <span class="split-line"><span data-i18n="hero.l1">一个窗口，</span></span><br />
-        <span class="split-line"><span class="accent-italic" data-i18n="hero.l2">装下所有文件。</span></span>
+        <span class="split-line"><span data-i18n="hero.l2">装下所有文件。</span></span>
       </h1>
       <p class="hero-sub reveal" data-i18n="hero.sub">
         一个免费的 Typora 平替，但不止于此。Typora 有的它都有：打字即渲染、表格、LaTeX；Typora 没有的它也有：<strong>标签页</strong>和<strong>文件树</strong>，所有文件开在同一个窗口。
@@ -86,60 +72,56 @@
           <span data-i18n="cta.mac">下载 macOS 版</span> <span class="arrow-pull">↓</span>
         </a>
       </div>
-      <p class="hero-note mono reveal" data-i18n="hero.note">
+      <p class="hero-note reveal" data-i18n="hero.note">
         构建未签名 — Windows：更多信息 → 仍要运行 · macOS：右键 → 打开
-      </p>
-
-      <!-- mock 应用窗口 + 截图 -->
-      <figure class="window-frame reveal" id="heroFrame">
-        <div class="window-chrome hairline-b">
-          <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-          <span class="window-title mono">workspace — HorseMD</span>
-        </div>
-        <img src="./assets/hero_light.png" alt="HorseMD：文件树工作区、标签页与所见即所得编辑" loading="eager" />
-      </figure>
-
-      <p class="hero-strip mono reveal">
-        <span>WYSIWYG</span><span class="sep">·</span>
-        <span data-i18n="strip.tabs">标签页</span><span class="sep">·</span>
-        <span data-i18n="strip.tree">文件树</span><span class="sep">·</span>
-        <span>⌘P</span><span class="sep">·</span>
-        <span>LaTeX</span><span class="sep">·</span>
-        <span data-i18n="strip.i18n">EN / 中文</span><span class="sep">·</span>
-        <span data-i18n="strip.themes">6 套主题</span>
       </p>
     </section>
 
-    <!-- ───────────── 特性 ───────────── -->
+    <!-- 商品照式截图 -->
+    <figure class="photo reveal">
+      <img src="./assets/hero_light.png" alt="HorseMD：文件树工作区、标签页与所见即所得编辑" loading="eager" />
+      <figcaption data-i18n="hero.caption">HORSEMD · 文件树 / 标签页 / 所见即所得</figcaption>
+    </figure>
+
+    <p class="hero-strip reveal">
+      <span>WYSIWYG</span><span class="sep">·</span>
+      <span data-i18n="strip.tabs">标签页</span><span class="sep">·</span>
+      <span data-i18n="strip.tree">文件树</span><span class="sep">·</span>
+      <span>⌘P</span><span class="sep">·</span>
+      <span>LaTeX</span><span class="sep">·</span>
+      <span data-i18n="strip.i18n">EN / 中文</span><span class="sep">·</span>
+      <span data-i18n="strip.themes">6 套主题</span>
+    </p>
+
+    <!-- ───────────── 特性：规格表 ───────────── -->
     <section class="section" id="features">
       <div class="section-head reveal">
-        <span class="index mono">01</span>
         <h2 data-i18n="features.title">它能做什么</h2>
       </div>
-      <div class="feature-grid feature-grid-4">
+      <div class="feature-grid">
         <article class="card reveal">
-          <span class="card-index mono">01</span>
+          <span class="card-index">01</span>
           <h3 data-i18n="f1.title">标签页</h3>
           <p data-i18n="f1.body">双击一个文件，是多一个标签，不是多一个窗口。</p>
-          <kbd class="mono">Ctrl/⌘ Tab</kbd>
+          <kbd>Ctrl/⌘ Tab</kbd>
         </article>
         <article class="card reveal">
-          <span class="card-index mono">02</span>
+          <span class="card-index">02</span>
           <h3 data-i18n="f2.title">文件夹工作区</h3>
           <p data-i18n="f2.body">整个文件夹挂在侧边栏，新建、重命名、删除都不用切出去。</p>
-          <kbd class="mono">Ctrl/⌘ B</kbd>
+          <kbd>Ctrl/⌘ B</kbd>
         </article>
         <article class="card reveal">
-          <span class="card-index mono">03</span>
+          <span class="card-index">03</span>
           <h3 data-i18n="f3.title">所见即所得</h3>
           <p data-i18n="f3.body">打字就渲染。表格、代码高亮、LaTeX、任务清单都认。</p>
-          <kbd class="mono">/</kbd>
+          <kbd>/</kbd>
         </article>
         <article class="card reveal">
-          <span class="card-index mono">04</span>
+          <span class="card-index">04</span>
           <h3 data-i18n="f4.title">命令面板</h3>
           <p data-i18n="f4.body">Ctrl+P 输几个字母就跳到任何文件，写长文不用翻着找标题。</p>
-          <kbd class="mono">Ctrl/⌘ P</kbd>
+          <kbd>Ctrl/⌘ P</kbd>
         </article>
       </div>
     </section>
@@ -147,44 +129,37 @@
     <!-- ───────────── 主题 ───────────── -->
     <section class="section" id="themes">
       <div class="section-head reveal">
-        <span class="index mono">02</span>
         <h2 data-i18n="themes.title">六套主题</h2>
       </div>
       <div class="theme-stage reveal">
-        <figure class="window-frame" id="themeFrame">
-          <div class="window-chrome hairline-b">
-            <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
-            <span class="window-title mono" id="themeTitle">theme — light</span>
-          </div>
-          <div class="theme-shot">
-            <img src="./assets/hero_light.png" alt="HorseMD 主题预览" id="themeImgA" class="on" loading="lazy" />
-            <img src="./assets/theme_dark.png" alt="" id="themeImgB" loading="lazy" />
-          </div>
-        </figure>
+        <div class="theme-shot">
+          <img src="./assets/hero_light.png" alt="HorseMD 主题预览" id="themeImgA" class="on" loading="lazy" />
+          <img src="./assets/theme_dark.png" alt="" id="themeImgB" loading="lazy" />
+        </div>
         <div class="theme-picker" role="tablist" aria-label="Themes">
-          <button class="swatch active" role="tab" data-img="hero_light.png" data-name="light" style="--sw:#faf6ef"><span class="mono" data-i18n="themes.light">明亮</span></button>
-          <button class="swatch" role="tab" data-img="theme_dark.png" data-name="dark" style="--sw:#22232b"><span class="mono" data-i18n="themes.dark">暗夜</span></button>
-          <button class="swatch" role="tab" data-img="theme_morandi_mist.png" data-name="morandi · mist" style="--sw:#aebfd2"><span class="mono" data-i18n="themes.mist">雾</span></button>
-          <button class="swatch" role="tab" data-img="theme_morandi_sage.png" data-name="morandi · sage" style="--sw:#7d8a6a"><span class="mono" data-i18n="themes.sage">鼠尾草</span></button>
-          <button class="swatch" role="tab" data-img="theme_morandi_rose.png" data-name="morandi · rose" style="--sw:#a8807b"><span class="mono" data-i18n="themes.rose">玫瑰</span></button>
-          <button class="swatch" role="tab" data-img="theme_morandi_dusk.png" data-name="morandi · dusk" style="--sw:#5d7385"><span class="mono" data-i18n="themes.dusk">暮色</span></button>
+          <button class="swatch active" role="tab" data-img="hero_light.png" style="--sw:#faf6ef"><span data-i18n="themes.light">明亮</span></button>
+          <button class="swatch" role="tab" data-img="theme_dark.png" style="--sw:#22232b"><span data-i18n="themes.dark">暗夜</span></button>
+          <button class="swatch" role="tab" data-img="theme_morandi_mist.png" style="--sw:#aebfd2"><span data-i18n="themes.mist">雾</span></button>
+          <button class="swatch" role="tab" data-img="theme_morandi_sage.png" style="--sw:#7d8a6a"><span data-i18n="themes.sage">鼠尾草</span></button>
+          <button class="swatch" role="tab" data-img="theme_morandi_rose.png" style="--sw:#a8807b"><span data-i18n="themes.rose">玫瑰</span></button>
+          <button class="swatch" role="tab" data-img="theme_morandi_dusk.png" style="--sw:#5d7385"><span data-i18n="themes.dusk">暮色</span></button>
         </div>
       </div>
     </section>
   </main>
 
   <!-- ───────────── 页脚 ───────────── -->
-  <footer class="footer hairline-t">
+  <footer class="footer">
     <div class="footer-left">
-      <img src="./assets/icon.png" alt="" width="20" height="20" />
-      <span class="mono">HorseMD · MIT License</span>
+      <img src="./assets/icon.png" alt="" width="18" height="18" />
+      <span>HORSEMD · MIT LICENSE</span>
     </div>
-    <nav class="footer-links mono">
-      <a class="ul-link" href="https://github.com/BND-1/horseMD" target="_blank" rel="noopener">GitHub</a>
-      <a class="ul-link" href="https://github.com/BND-1/horseMD/releases" target="_blank" rel="noopener">Releases</a>
-      <a class="ul-link" href="https://github.com/BND-1/horseMD/issues" target="_blank" rel="noopener">Issues</a>
+    <nav class="footer-links">
+      <a href="https://github.com/BND-1/horseMD" target="_blank" rel="noopener">GITHUB</a>
+      <a href="https://github.com/BND-1/horseMD/releases" target="_blank" rel="noopener">RELEASES</a>
+      <a href="https://github.com/BND-1/horseMD/issues" target="_blank" rel="noopener">ISSUES</a>
     </nav>
-    <span class="mono tabular footer-ver" id="footVersion">v0.1.2</span>
+    <span class="footer-ver" id="footVersion">v0.1.2</span>
   </footer>
 
   <script src="./app.js" defer></script>

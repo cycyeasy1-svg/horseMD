@@ -1,5 +1,5 @@
 /* ───────────────────────────────────────────────────────────
-   HorseMD 官网 — 交互：i18n / reveal / 画廊 / 磁吸 / scrollspy
+   HorseMD 官网（無印风）— i18n / 淡入 / 画廊 / 下载直链
    ─────────────────────────────────────────────────────────── */
 
 /* ── i18n ─────────────────────────────────────────────────── */
@@ -11,6 +11,7 @@ const I18N = {
     'hero.sub': '一个免费的 Typora 平替，但不止于此。Typora 有的它都有：打字即渲染、表格、LaTeX；Typora 没有的它也有：<strong>标签页</strong>和<strong>文件树</strong>，所有文件开在同一个窗口。',
     'cta.win': '下载 Windows 版', 'cta.mac': '下载 macOS 版',
     'hero.note': '构建未签名 — Windows：更多信息 → 仍要运行 · macOS：右键 → 打开',
+    'hero.caption': 'HORSEMD · 文件树 / 标签页 / 所见即所得',
     'strip.tabs': '标签页', 'strip.tree': '文件树', 'strip.i18n': 'EN / 中文', 'strip.themes': '6 套主题',
     'features.title': '它能做什么',
     'f1.title': '标签页', 'f1.body': '双击一个文件，是多一个标签，不是多一个窗口。',
@@ -21,15 +22,16 @@ const I18N = {
     'themes.light': '明亮', 'themes.dark': '暗夜', 'themes.mist': '雾',
     'themes.sage': '鼠尾草', 'themes.rose': '玫瑰', 'themes.dusk': '暮色',
     '_title': 'HorseMD — 一个窗口，装下所有 Markdown',
-    '_desc': 'HorseMD：温暖安静的 Typora 风格 Markdown 编辑器。标签页 + 文件树 + 所见即所得，Windows 与 macOS，免费开源。',
+    '_desc': 'HorseMD：免费开源的 Typora 平替。标签页 + 文件树 + 所见即所得，Windows 与 macOS。',
   },
   en: {
-    'nav.features': 'Features', 'nav.themes': 'Themes',
+    'nav.features': 'FEATURES', 'nav.themes': 'THEMES',
     'hero.kicker': 'FREE · OPEN SOURCE · NO ACCOUNT',
     'hero.l1': 'One window.', 'hero.l2': 'Every file.',
     'hero.sub': 'A free Typora alternative, and then some. Everything Typora has: type-and-it-renders, tables, LaTeX. Plus what it never had: <strong>tabs</strong> and a <strong>file tree</strong>, every file in one window.',
     'cta.win': 'Download for Windows', 'cta.mac': 'Download for macOS',
     'hero.note': 'Unsigned builds — Windows: More info → Run anyway · macOS: right-click → Open',
+    'hero.caption': 'HORSEMD · FILE TREE / TABS / WYSIWYG',
     'strip.tabs': 'Tabs', 'strip.tree': 'File tree', 'strip.i18n': 'EN / 中文', 'strip.themes': '6 themes',
     'features.title': 'What it does',
     'f1.title': 'Tabs', 'f1.body': 'Double-click a file and you get a new tab, not another window.',
@@ -40,7 +42,7 @@ const I18N = {
     'themes.light': 'Light', 'themes.dark': 'Dark', 'themes.mist': 'Mist',
     'themes.sage': 'Sage', 'themes.rose': 'Rose', 'themes.dusk': 'Dusk',
     '_title': 'HorseMD — One window. Every file.',
-    '_desc': 'HorseMD: a calm, Typora-style Markdown editor with tabs and a file-tree workspace. Free & open source for Windows and macOS.',
+    '_desc': 'HorseMD: a free Typora alternative with tabs and a file-tree workspace. Open source, for Windows and macOS.',
   },
 }
 
@@ -67,49 +69,26 @@ document.getElementById('langToggle').addEventListener('click', () => {
 })
 applyLang()
 
-/* ── 滚动进度细线 ─────────────────────────────────────────── */
-const onScroll = () => {
-  const h = document.documentElement
-  const p = h.scrollTop / Math.max(1, h.scrollHeight - h.clientHeight)
-  h.style.setProperty('--p', p.toFixed(4))
-}
-document.addEventListener('scroll', onScroll, { passive: true })
-onScroll()
-
-/* ── reveal on scroll ─────────────────────────────────────── */
+/* ── 淡入 ─────────────────────────────────────────────────── */
 const io = new IntersectionObserver(entries => {
   entries.forEach(e => {
     if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target) }
   })
-}, { threshold: 0.12, rootMargin: '0px 0px -8% 0px' })
+}, { threshold: 0.1, rootMargin: '0px 0px -6% 0px' })
 document.querySelectorAll('.reveal').forEach((el, i) => {
-  el.style.transitionDelay = `${(i % 3) * 90}ms`
+  el.style.transitionDelay = `${(i % 3) * 80}ms`
   io.observe(el)
 })
 
-/* hero split-line：加载后逐行升起 */
 requestAnimationFrame(() => {
   document.querySelectorAll('.split-line').forEach((el, i) => {
-    setTimeout(() => el.classList.add('in'), 150 + i * 160)
+    setTimeout(() => el.classList.add('in'), 120 + i * 180)
   })
 })
-
-/* ── hero 截图：鼠标视差 tilt ─────────────────────────────── */
-const frame = document.getElementById('heroFrame')
-if (frame && matchMedia('(hover: hover)').matches) {
-  frame.addEventListener('mousemove', e => {
-    const r = frame.getBoundingClientRect()
-    const x = (e.clientX - r.left) / r.width - 0.5
-    const y = (e.clientY - r.top) / r.height - 0.5
-    frame.style.transform = `perspective(1400px) rotateX(${(-y * 2.4).toFixed(2)}deg) rotateY(${(x * 2.4).toFixed(2)}deg)`
-  })
-  frame.addEventListener('mouseleave', () => { frame.style.transform = '' })
-}
 
 /* ── 主题画廊：双图交叉淡入 ───────────────────────────────── */
 const imgA = document.getElementById('themeImgA')
 const imgB = document.getElementById('themeImgB')
-const themeTitle = document.getElementById('themeTitle')
 let frontIsA = true
 document.querySelectorAll('.swatch').forEach(btn => {
   btn.addEventListener('click', () => {
@@ -125,42 +104,12 @@ document.querySelectorAll('.swatch').forEach(btn => {
     back.src = `./assets/${btn.dataset.img}`
     if (back.complete) swap()
     else back.onload = swap
-    themeTitle.textContent = `theme — ${btn.dataset.name}`
   })
 })
 
-/* ── 按访客系统突出对应的下载按钮，另一个降为描边 ────────── */
+/* ── 按访客系统突出对应的下载按钮 ────────────────────────── */
 const isMac = /mac/i.test(navigator.platform || '') || /Macintosh/.test(navigator.userAgent)
 document.getElementById(isMac ? 'dlWin' : 'dlMac').classList.replace('btn-solid', 'btn-ghost')
-
-/* ── 磁吸按钮：朝指针轻微吸附 ─────────────────────────────── */
-if (matchMedia('(hover: hover)').matches) {
-  document.querySelectorAll('.btn, .lang-toggle').forEach(el => {
-    el.addEventListener('mousemove', e => {
-      const r = el.getBoundingClientRect()
-      const dx = (e.clientX - r.left - r.width / 2) * 0.12
-      const dy = (e.clientY - r.top - r.height / 2) * 0.2
-      el.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`
-    })
-    el.addEventListener('mouseleave', () => { el.style.transform = '' })
-  })
-}
-
-/* ── scrollspy：导航高亮当前区块 ──────────────────────────── */
-const spyMap = new Map()
-document.querySelectorAll('.nav-links a[href^="#"]').forEach(a => {
-  const sec = document.querySelector(a.getAttribute('href'))
-  if (sec) spyMap.set(sec, a)
-})
-const spy = new IntersectionObserver(entries => {
-  entries.forEach(e => {
-    if (e.isIntersecting) {
-      spyMap.forEach(a => a.classList.remove('active'))
-      spyMap.get(e.target)?.classList.add('active')
-    }
-  })
-}, { rootMargin: '-35% 0px -55% 0px' })
-spyMap.forEach((a, sec) => spy.observe(sec))
 
 /* ── GitHub Releases：填充版本号与安装包直链 ─────────────── */
 fetch('https://api.github.com/repos/BND-1/horseMD/releases/latest')
