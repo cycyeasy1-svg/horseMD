@@ -142,21 +142,57 @@ if (frame && matchMedia('(hover: hover)').matches) {
   frame.addEventListener('mouseleave', () => { frame.style.transform = '' })
 }
 
-/* ── 主题画廊 ─────────────────────────────────────────────── */
-const themeImg = document.getElementById('themeImg')
+/* ── 主题画廊：双图交叉淡入 ───────────────────────────────── */
+const imgA = document.getElementById('themeImgA')
+const imgB = document.getElementById('themeImgB')
 const themeTitle = document.getElementById('themeTitle')
+let frontIsA = true
 document.querySelectorAll('.swatch').forEach(btn => {
   btn.addEventListener('click', () => {
     document.querySelectorAll('.swatch').forEach(b => b.classList.remove('active'))
     btn.classList.add('active')
-    /* 重新触发淡入动画 */
-    themeImg.style.animation = 'none'
-    void themeImg.offsetWidth
-    themeImg.style.animation = ''
-    themeImg.src = `./assets/${btn.dataset.img}`
+    const back = frontIsA ? imgB : imgA
+    const front = frontIsA ? imgA : imgB
+    const swap = () => {
+      back.classList.add('on')
+      front.classList.remove('on')
+      frontIsA = !frontIsA
+    }
+    back.src = `./assets/${btn.dataset.img}`
+    if (back.complete) swap()
+    else back.onload = swap
     themeTitle.textContent = `theme — ${btn.dataset.name}`
   })
 })
+
+/* ── 磁吸按钮：朝指针轻微吸附 ─────────────────────────────── */
+if (matchMedia('(hover: hover)').matches) {
+  document.querySelectorAll('.btn, .lang-toggle').forEach(el => {
+    el.addEventListener('mousemove', e => {
+      const r = el.getBoundingClientRect()
+      const dx = (e.clientX - r.left - r.width / 2) * 0.12
+      const dy = (e.clientY - r.top - r.height / 2) * 0.2
+      el.style.transform = `translate(${dx.toFixed(1)}px, ${dy.toFixed(1)}px)`
+    })
+    el.addEventListener('mouseleave', () => { el.style.transform = '' })
+  })
+}
+
+/* ── scrollspy：导航高亮当前区块 ──────────────────────────── */
+const spyMap = new Map()
+document.querySelectorAll('.nav-links a[href^="#"]').forEach(a => {
+  const sec = document.querySelector(a.getAttribute('href'))
+  if (sec) spyMap.set(sec, a)
+})
+const spy = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      spyMap.forEach(a => a.classList.remove('active'))
+      spyMap.get(e.target)?.classList.add('active')
+    }
+  })
+}, { rootMargin: '-35% 0px -55% 0px' })
+spyMap.forEach((a, sec) => spy.observe(sec))
 
 /* ── GitHub Releases：填充版本号与直链 ───────────────────── */
 fetch('https://api.github.com/repos/BND-1/horseMD/releases/latest')

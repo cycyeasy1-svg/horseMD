@@ -45,6 +45,10 @@
   <link rel="stylesheet" href="./styles.css" />
 </head>
 <body>
+  <div class="bg" aria-hidden="true">
+    <div class="bg-aurora"></div>
+    <div class="bg-grain"></div>
+  </div>
   <div class="scroll-bar" aria-hidden="true"></div>
 
   <!-- ───────────── 顶部导航 ───────────── -->
@@ -92,7 +96,7 @@
         <img src="./assets/hero_light.png" alt="HorseMD：文件树工作区、标签页与所见即所得编辑" loading="eager" />
       </figure>
 
-      <p class="hero-strip mono hairline-t hairline-b reveal">
+      <p class="hero-strip mono reveal">
         <span>WYSIWYG</span><span class="sep">·</span>
         <span data-i18n="strip.tabs">标签页</span><span class="sep">·</span>
         <span data-i18n="strip.tree">文件树</span><span class="sep">·</span>
@@ -163,7 +167,10 @@
             <span class="dot dot-r"></span><span class="dot dot-y"></span><span class="dot dot-g"></span>
             <span class="window-title mono" id="themeTitle">theme — light</span>
           </div>
-          <img src="./assets/hero_light.png" alt="HorseMD 主题预览" id="themeImg" loading="lazy" />
+          <div class="theme-shot">
+            <img src="./assets/hero_light.png" alt="HorseMD 主题预览" id="themeImgA" class="on" loading="lazy" />
+            <img src="./assets/theme_dark.png" alt="" id="themeImgB" loading="lazy" />
+          </div>
         </figure>
         <div class="theme-picker" role="tablist" aria-label="Themes">
           <button class="swatch active" role="tab" data-img="hero_light.png" data-name="light" style="--sw:#faf6ef"><span class="mono" data-i18n="themes.light">明亮</span></button>
