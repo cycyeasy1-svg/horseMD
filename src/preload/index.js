@@ -12,6 +12,7 @@ const api = {
   openFiles: () => ipcRenderer.invoke('dialog:openFiles'),
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   saveAs: (defaultName) => ipcRenderer.invoke('dialog:saveAs', defaultName),
+  exportPDF: (html, defaultName) => ipcRenderer.invoke('export:pdf', { html, defaultName }),
 
   // fs
   readFile: (path) => ipcRenderer.invoke('fs:readFile', path),

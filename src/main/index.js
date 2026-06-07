@@ -158,6 +158,49 @@ ipcMain.handle('dialog:saveAs', async (_e, defaultName) => {
   return res.canceled ? null : res.filePath
 })
 
+// Export the current document (inline-styled HTML from the renderer) to a PDF
+// by rendering it in a hidden window and using Chromium's printToPDF.
+ipcMain.handle('export:pdf', async (_e, { html, defaultName }) => {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName || 'Untitled.pdf',
+    filters: [{ name: 'PDF', extensions: ['pdf'] }]
+  })
+  if (res.canceled || !res.filePath) return { canceled: true }
+
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>
+    @page { margin: 18mm 16mm; }
+    html, body { margin: 0; }
+    .doc {
+      max-width: 760px; margin: 0 auto; padding: 8px;
+      font-family: 'Helvetica Neue', Helvetica, Arial, 'PingFang SC', 'Hiragino Sans GB',
+        'Source Han Sans SC', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+      font-size: 15px; line-height: 1.7; color: #24292f;
+      -webkit-font-smoothing: antialiased; word-wrap: break-word;
+    }
+    .doc img { max-width: 100%; }
+    .doc pre { background: #f6f8fa; padding: 14px 16px; border-radius: 8px;
+      font-family: Consolas, Monaco, monospace; font-size: 0.9em; line-height: 1.5;
+      white-space: pre-wrap; word-break: break-word; }
+    .doc table { border-collapse: collapse; }
+    .doc h1, .doc h2, .doc h3, .doc h4, .doc h5, .doc h6 { page-break-after: avoid; }
+    .doc pre, .doc blockquote, .doc table, .doc img { page-break-inside: avoid; }
+  </style></head><body><div class="doc">${html}</div></body></html>`
+
+  const tmp = join(app.getPath('temp'), `horsemd-export-${Date.now()}.html`)
+  await fs.writeFile(tmp, doc, 'utf8')
+  const win = new BrowserWindow({ show: false, webPreferences: { webSecurity: false } })
+  try {
+    await win.loadFile(tmp)
+    const pdf = await win.webContents.printToPDF({ printBackground: true, pageSize: 'A4' })
+    await fs.writeFile(res.filePath, pdf)
+  } finally {
+    if (!win.isDestroyed()) win.destroy()
+    fs.unlink(tmp).catch(() => {})
+  }
+  shell.openPath(res.filePath)
+  return { path: res.filePath }
+})
+
 ipcMain.handle('fs:readFile', async (_e, path) => {
   const content = await fs.readFile(path, 'utf8')
   const stat = await fs.stat(path)
@@ -336,6 +379,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: 'Save', accelerator: 'CmdOrCtrl+S', click: menuCmd('save') },
         { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: menuCmd('saveAs') },
+        { label: 'Export as PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: menuCmd('exportPdf') },
         { type: 'separator' },
         { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: menuCmd('closeTab') },
         isMac ? { role: 'close' } : { role: 'quit' }

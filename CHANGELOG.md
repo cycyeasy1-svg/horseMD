@@ -8,6 +8,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [0.1.2] - 2026-06-06
 
+### Added
+- Export the current document to **PDF** (File → Export as PDF…, `Ctrl/Cmd+Shift+E`,
+  or the command palette). Renders a clean, print-styled copy without editor
+  chrome (code-block toolbar, table handles, etc.).
+
 ### Changed
 - Writing font in the editor now matches the website — a sans-serif stack
   (Helvetica Neue / PingFang SC …) instead of the previous serif.

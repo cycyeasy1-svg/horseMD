@@ -307,8 +307,40 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
         onChange?.(md, true)
         ready = true
         reportActiveBlock()
-        apiRef.current = { setBlock }
-        onReady?.({ setBlock, getView: () => viewRef.current })
+        // Produce a clean, inline-styled HTML snapshot of the whole document
+        // for PDF export (reuses the rich-copy styling; flattens CodeMirror code
+        // blocks to plain <pre><code> so they render predictably).
+        const getDocHTML = () => {
+          const v = viewRef.current
+          if (!v) return ''
+          const clone = v.dom.cloneNode(true)
+          // Drop editor-only widgets so they don't end up in the PDF: code-block
+          // toolbar (language picker + Copy), table handles/add/align/delete
+          // buttons, block/drag handles, image resize handles, and the custom
+          // list-item bullet labels (native list markers render instead).
+          clone
+            .querySelectorAll(
+              'button, select, .language-picker, .language-list, .tools, ' +
+                '.tools-button-group, .button-group, .cm-panel, .cm-tooltip, ' +
+                '.preview-panel, .cell-handle, .line-handle, .handle, .add-button, ' +
+                '.operation, .operation-item, .drag-preview, .milkdown-block-handle, ' +
+                '.milkdown-toolbar, .image-resize-handle, .label-wrapper'
+            )
+            .forEach((el) => el.remove())
+          // Flatten CodeMirror editors to plain <pre><code>.
+          clone.querySelectorAll('.cm-editor').forEach((cm) => {
+            const lines = [...cm.querySelectorAll('.cm-line')].map((l) => l.textContent)
+            const pre = document.createElement('pre')
+            const code = document.createElement('code')
+            code.textContent = (lines.length ? lines.join('\n') : cm.textContent).replace(/\n+$/, '')
+            pre.appendChild(code)
+            cm.replaceWith(pre)
+          })
+          inlineRichStyles(clone)
+          return clone.innerHTML
+        }
+        apiRef.current = { setBlock, getDocHTML }
+        onReady?.({ setBlock, getView: () => viewRef.current, getDocHTML })
       })
       .catch((err) => console.error('Crepe init failed', err))
 

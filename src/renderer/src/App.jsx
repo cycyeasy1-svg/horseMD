@@ -306,6 +306,15 @@ export default function App() {
     openFolder,
     save: () => activeId && saveTab(activeId),
     saveAs: () => activeId && saveTab(activeId, true),
+    exportPdf: async () => {
+      const html = editorApiRef.current?.getDocHTML?.()
+      if (!html) {
+        window.alert(tRef.current('error.exportPdfUnavailable'))
+        return
+      }
+      const base = (activeTab?.title || 'Untitled').replace(/\.(md|markdown|mdx|txt)$/i, '')
+      await window.api.exportPDF(html, base + '.pdf')
+    },
     closeTab: () => activeId && closeTab(activeId),
     palette: () => setPaletteOpen((v) => !v),
     toggleSidebar: () => setSidebarOpen((v) => !v),
@@ -426,6 +435,7 @@ export default function App() {
       { id: 'cmd.openFolder', title: t('cmd.openFolder'), icon: 'folder', run: () => handlers.current.openFolder() },
       { id: 'cmd.save', title: t('cmd.save'), icon: 'save', run: () => handlers.current.save() },
       { id: 'cmd.saveAs', title: t('cmd.saveAs'), icon: 'save', run: () => handlers.current.saveAs() },
+      { id: 'cmd.exportPdf', title: t('cmd.exportPdf'), icon: 'file', run: () => handlers.current.exportPdf() },
       { id: 'cmd.sidebar', title: t('cmd.sidebar'), icon: 'sidebar', run: () => handlers.current.toggleSidebar() },
       { id: 'cmd.files', title: t('cmd.files'), icon: 'folder', run: () => handlers.current.toggleFiles() },
       { id: 'cmd.outline', title: t('cmd.outline'), icon: 'outline', run: () => handlers.current.toggleOutline() },
