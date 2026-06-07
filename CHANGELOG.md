@@ -6,6 +6,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Fixed
+- Open files now reliably auto-refresh when changed by another program: the
+  single-file watcher polls (surviving "atomic replace" saves used by many
+  editors/tools), and the editor remounts on reload so the new content actually
+  shows.
+
 ## [0.1.2] - 2026-06-06
 
 ### Added

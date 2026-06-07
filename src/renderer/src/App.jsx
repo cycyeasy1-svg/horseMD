@@ -563,7 +563,10 @@ export default function App() {
               }
               return (
                 <div
-                  key={tab.id}
+                  // Include reloadNonce so an external-edit reload remounts the
+                  // Crepe editor with the new content (the create effect only
+                  // runs on mount). tab switches keep the same key → stay mounted.
+                  key={`${tab.id}:${tab.reloadNonce}`}
                   className="editor-scroll"
                   ref={isActive ? editorHostRef : undefined}
                   style={{ display: isActive ? undefined : 'none' }}

@@ -368,6 +368,13 @@ ipcMain.handle('watch:file', async (_e, path) => {
   if (fileWatchers.has(path)) return true
   const w = chokidar.watch(path, {
     ignoreInitial: true,
+    // Poll the file (instead of native fs events). Many editors/tools save via
+    // "atomic replace" (write temp + rename over), which swaps the file's inode
+    // and makes a native single-file watch go deaf after the first such save.
+    // Polling re-stats the path, so it keeps catching changes regardless.
+    usePolling: true,
+    interval: 400,
+    binaryInterval: 600,
     awaitWriteFinish: { stabilityThreshold: 200, pollInterval: 50 }
   })
   const entry = { watcher: w, timer: null }
