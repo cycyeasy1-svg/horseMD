@@ -744,7 +744,10 @@ button:focus-visible,
   display: block;
 }
 .hm-heading-pop-inner {
-  display: flex;
+  /* 7 items (H1…H6 + ¶) — a 4-col grid stays compact (~140px) so the popup
+     never clips at the viewport edges, unlike a single 7-wide row. */
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
   gap: 2px;
   padding: 4px;
   background: var(--bg-elevated);

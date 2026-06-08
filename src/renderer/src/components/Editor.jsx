@@ -241,11 +241,14 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
 
         // --- Inject a heading-level button into Crepe's selection toolbar ---
         // Crepe's toolbar (bold/italic/strike…) has no submenu support, so we
-        // append our own "H" item; hovering it reveals H1 / H2 / H3 / ¶.
+        // append our own "H" item; hovering it reveals H1…H6 / ¶.
         const HEAD_DEFS = [
           ['h1', 'H1', 'Ctrl+1'],
           ['h2', 'H2', 'Ctrl+2'],
           ['h3', 'H3', 'Ctrl+3'],
+          ['h4', 'H4', 'Ctrl+4'],
+          ['h5', 'H5', 'Ctrl+5'],
+          ['h6', 'H6', 'Ctrl+6'],
           ['paragraph', '¶', 'Ctrl+0']
         ]
         const injectHeadingButton = (toolbar) => {
