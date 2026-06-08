@@ -8,6 +8,14 @@ import '@milkdown/crepe/theme/common/link-tooltip.css'
 import { BLOCK_TYPES, blockById, currentBlockId } from '../blocks.js'
 import { useI18n } from '../i18n.jsx'
 
+// Every mounted rich editor registers itself here. Rich-text tabs stay mounted,
+// so several editors (and several Crepe selection toolbars) coexist. The
+// heading button injected into a toolbar resolves its target editor at click
+// time — the one that currently owns the selection — instead of capturing a
+// single instance, which previously made the button act on the wrong (hidden)
+// tab when more than one tab was open.
+const liveEditors = new Set()
+
 /**
  * WYSIWYG editor (Milkdown Crepe) with Typora-style block-level controls.
  *
@@ -35,6 +43,12 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
     let ready = false
     let destroyed = false
     const cleanups = []
+
+    // Register this editor so a globally-injected toolbar button can find the
+    // editor that currently has the selection. Getters read the live refs.
+    const self = { host, getView: () => viewRef.current, getApi: () => apiRef.current }
+    liveEditors.add(self)
+    cleanups.push(() => liveEditors.delete(self))
 
     const crepe = new Crepe({
       root: host,
@@ -262,7 +276,13 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
             b.addEventListener('click', (e) => {
               e.preventDefault()
               e.stopPropagation()
-              apiRef.current?.setBlock(id)
+              // Act on the editor that owns this toolbar's selection — the
+              // focused one — not whichever instance injected the button.
+              const target =
+                [...liveEditors].find((ed) => ed.getView()?.hasFocus()) ||
+                [...liveEditors].find((ed) => ed.host.contains(toolbar)) ||
+                self
+              target.getApi()?.setBlock(id)
             })
             inner.appendChild(b)
           }
@@ -276,6 +296,9 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
         // Inject synchronously (no requestAnimationFrame — it's throttled when
         // the window is occluded, which would skip injection). The scan is cheap
         // and injectHeadingButton early-returns once the button is present.
+        // Scan globally because Crepe may render its toolbar outside `host`; the
+        // button routes its click to the focused editor (see the click handler),
+        // so it doesn't matter which instance injected it.
         const scanToolbars = () => {
           document.querySelectorAll('.milkdown-toolbar').forEach(injectHeadingButton)
         }
