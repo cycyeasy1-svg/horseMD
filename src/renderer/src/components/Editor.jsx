@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
-import { editorViewCtx } from '@milkdown/kit/core'
+import { editorViewCtx, editorViewOptionsCtx } from '@milkdown/kit/core'
 import { TextSelection } from '@milkdown/prose/state'
 import '@milkdown/crepe/theme/common/style.css'
 import '@milkdown/crepe/theme/frame.css'
@@ -8,12 +8,12 @@ import '@milkdown/crepe/theme/common/link-tooltip.css'
 import { BLOCK_TYPES, blockById, currentBlockId } from '../blocks.js'
 import { useI18n } from '../i18n.jsx'
 
-// Every mounted rich editor registers itself here. Rich-text tabs stay mounted,
-// so several editors (and several Crepe selection toolbars) coexist. The
-// heading button injected into a toolbar resolves its target editor at click
-// time — the one that currently owns the selection — instead of capturing a
-// single instance, which previously made the button act on the wrong (hidden)
-// tab when more than one tab was open.
+// Every mounted rich editor registers itself here. A rich-text tab stays mounted
+// after its first activation, so several editors (and several Crepe selection
+// toolbars) can coexist. The heading button injected into a toolbar resolves its
+// target editor at click time — the one that currently owns the selection —
+// instead of capturing a single instance, which previously made the button act
+// on the wrong (hidden) tab when more than one tab was open.
 const liveEditors = new Set()
 
 /**
@@ -73,6 +73,18 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
         // Localized empty-block placeholder (replaces Crepe's "Please enter").
         [CrepeFeature.Placeholder]: { text: t('editor.placeholder'), mode: 'block' }
       }
+    })
+
+    // Render raw HTML blocks (e.g. <table>…</table>) as actual HTML, like Typora.
+    // Milkdown's default `html` node shows the markup as escaped text. We add a
+    // ProseMirror node view that renders the HTML instead. The document model is
+    // unchanged (the node still round-trips through attrs.value), so saving keeps
+    // the original HTML source — we only change how it's displayed.
+    crepe.editor.config((ctx) => {
+      ctx.update(editorViewOptionsCtx, (prev) => ({
+        ...prev,
+        nodeViews: { ...(prev?.nodeViews || {}), html: renderHtmlNodeView }
+      }))
     })
 
     // Convert the block the cursor sits in to a given block id (paragraph/h1…h6).
@@ -152,6 +164,22 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
       setLevel({ label, kind, align, top: (coords.top + coords.bottom) / 2, x })
     }
 
+    // refreshLevel does forced layout reads (coordsAtPos / getBoundingClientRect).
+    // Selection change and scroll fire on every keystroke; on a large document
+    // that synchronous reflow is the main typing lag. Coalesce bursts into one
+    // measurement per animation frame.
+    let levelRaf = 0
+    const scheduleLevel = () => {
+      if (levelRaf) return
+      levelRaf = requestAnimationFrame(() => {
+        levelRaf = 0
+        refreshLevel()
+      })
+    }
+    cleanups.push(() => {
+      if (levelRaf) cancelAnimationFrame(levelRaf)
+    })
+
     // IMPORTANT: register listeners BEFORE create(). Crepe wires them during
     // create(), so registering afterwards means `markdownUpdated` never fires —
     // which left tab.content (outline, word count, dirty state, and saves!)
@@ -209,9 +237,9 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
 
         const onSelChange = () => {
           const v = viewRef.current
-          if (!v) return
-          if (v.hasFocus()) reportActiveBlock()
-          refreshLevel()
+          if (!v || !v.hasFocus()) return
+          reportActiveBlock()
+          scheduleLevel()
         }
 
         if (view) {
@@ -228,7 +256,7 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
           cleanups.push(() => view.dom.removeEventListener('focus', onFocus))
           const scrollEl = host.closest('.editor-scroll')
           if (scrollEl) {
-            const onScroll = () => refreshLevel()
+            const onScroll = () => scheduleLevel()
             scrollEl.addEventListener('scroll', onScroll, { passive: true })
             cleanups.push(() => scrollEl.removeEventListener('scroll', onScroll))
           }
@@ -396,9 +424,32 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
           })
         }
         scanToolbars()
-        const toolbarObserver = new MutationObserver(scanToolbars)
+        // The toolbar is created on selection, so we only need to re-scan when
+        // nodes are actually added — not on every edit. Skip mutation batches
+        // with no added nodes, and coalesce the rest into one scan per frame, so
+        // typing in a large document doesn't trigger a document-wide query each
+        // keystroke (one observer per mounted editor made this add up).
+        let scanRaf = 0
+        const scheduleScan = () => {
+          if (scanRaf) return
+          scanRaf = requestAnimationFrame(() => {
+            scanRaf = 0
+            scanToolbars()
+          })
+        }
+        const toolbarObserver = new MutationObserver((muts) => {
+          for (const m of muts) {
+            if (m.addedNodes && m.addedNodes.length) {
+              scheduleScan()
+              return
+            }
+          }
+        })
         toolbarObserver.observe(document.body, { childList: true, subtree: true })
-        cleanups.push(() => toolbarObserver.disconnect())
+        cleanups.push(() => {
+          if (scanRaf) cancelAnimationFrame(scanRaf)
+          toolbarObserver.disconnect()
+        })
         }
 
         // Typora-style title: a brand-new / empty document starts its first
@@ -534,6 +585,53 @@ export default function Editor({ initialContent, docPath, onChange, onReady, onA
       )}
     </>
   )
+}
+
+// ----------------------------- raw HTML rendering -----------------------------
+
+// Block-level tags whose HTML we render visually (rather than show as source).
+// Targeted at the common case — HTML tables pasted into Markdown — plus a few
+// other safe block containers. Inline fragments (a stray <b>, <span>) fall back
+// to the default escaped-text rendering so unbalanced bits can't break layout.
+const RENDER_HTML_RE =
+  /^\s*<(table|thead|tbody|tfoot|tr|td|th|div|details|summary|figure|figcaption|section|article|dl|center|sub|sup|kbd|mark|abbr|u|ins|del)[\s/>]/i
+
+// Strip <script>/<style> and inline event handlers so rendering local HTML can't
+// run code. Tables/fragments parse correctly inside a <template>.
+function sanitizeHtml(html) {
+  const tpl = document.createElement('template')
+  tpl.innerHTML = html
+  tpl.content.querySelectorAll('script, style').forEach((el) => el.remove())
+  tpl.content.querySelectorAll('*').forEach((el) => {
+    for (const attr of [...el.attributes]) {
+      if (/^on/i.test(attr.name)) el.removeAttribute(attr.name)
+      else if (/^(href|src)$/i.test(attr.name) && /^\s*javascript:/i.test(attr.value)) {
+        el.removeAttribute(attr.name)
+      }
+    }
+  })
+  return tpl.innerHTML
+}
+
+// ProseMirror node view for Milkdown's `html` node. Renders recognized block
+// HTML as real DOM; leaves other html nodes to their default text rendering.
+function renderHtmlNodeView(node) {
+  const value = node.attrs?.value || ''
+  if (!RENDER_HTML_RE.test(value)) {
+    // Not something we render — mimic the default: escaped text in a span.
+    const span = document.createElement('span')
+    span.setAttribute('data-type', 'html')
+    span.textContent = value
+    return { dom: span, ignoreMutation: () => true }
+  }
+  const dom = document.createElement('div')
+  dom.className = 'hm-html-block'
+  dom.setAttribute('data-type', 'html')
+  dom.contentEditable = 'false'
+  dom.innerHTML = sanitizeHtml(value)
+  // The node is an atom with no editable content; ignore inner DOM mutations so
+  // ProseMirror doesn't try to reconcile the rendered HTML.
+  return { dom, ignoreMutation: () => true, stopEvent: () => false }
 }
 
 // Convert the block containing the cursor to a different type. Operates on the

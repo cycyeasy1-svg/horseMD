@@ -142,11 +142,17 @@ export default function App() {
   const sourceRef = useRef(null) // active source-mode <textarea>
   const scrollRatioRef = useRef(null) // pending scroll position to restore across a mode switch
   const findInputRef = useRef(null)
-  // Registry of each tab's editor API (by tab id). All markdown tabs stay
-  // mounted, so a single ref would get stuck on whichever editor mounted last;
-  // keying by tab id lets commands act on the *currently active* document.
+  // Registry of each tab's editor API (by tab id). Several markdown editors can
+  // be mounted at once (a tab stays mounted after its first activation), so a
+  // single ref would get stuck on whichever editor mounted last; keying by tab
+  // id lets commands act on the *currently active* document.
   const editorApis = useRef({})
   const [activeBlock, setActiveBlock] = useState('paragraph')
+  // Lazy mounting: a rich (Crepe) editor is only created once its tab has been
+  // activated, then kept mounted so later tab switches stay instant. This keeps
+  // startup/session-restore fast — only the active tab spins up an editor
+  // instead of every restored tab parsing its whole document at once.
+  const [mountedIds, setMountedIds] = useState(() => new Set())
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeId) || null, [tabs, activeId])
   const activePath = activeTab?.path || null
@@ -165,7 +171,23 @@ export default function App() {
     for (const id of Object.keys(editorApis.current)) {
       if (!live.has(id)) delete editorApis.current[id]
     }
+    // Forget mount records for closed tabs (so the Set doesn't grow unbounded).
+    setMountedIds((prev) => {
+      let changed = false
+      const next = new Set()
+      for (const id of prev) {
+        if (live.has(id)) next.add(id)
+        else changed = true
+      }
+      return changed ? next : prev
+    })
   }, [tabs])
+
+  // Mark the active tab as mounted (and keep it mounted thereafter).
+  useEffect(() => {
+    if (activeId == null) return
+    setMountedIds((prev) => (prev.has(activeId) ? prev : new Set(prev).add(activeId)))
+  }, [activeId])
 
   // ----------------------------- theme / i18n -----------------------------
   useEffect(() => {
@@ -836,6 +858,10 @@ export default function App() {
               // Hidden when this isn't the visible view: a background tab, or the
               // active tab currently being shown as source above.
               const hidden = !isActive || sourceMode
+              // Lazy mount: don't create a Crepe editor for a tab the user
+              // hasn't opened yet (keeps session-restore of many tabs fast).
+              // The active tab always mounts; visited tabs stay mounted.
+              if (!isActive && !mountedIds.has(tab.id)) return null
               return (
                 <div
                   // Include reloadNonce so an external-edit reload remounts the

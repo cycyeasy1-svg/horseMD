@@ -6,6 +6,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 
 ## [Unreleased]
 
+### Added
+- **Raw HTML tables now render as tables** (like Typora). An HTML `<table>…</table>`
+  written in the Markdown is shown as a real, theme-styled table instead of
+  escaped source. The Markdown source is unchanged — it round-trips and saves as
+  the original HTML (rendering is display-only; `<script>`/inline event handlers
+  are stripped).
+
+### Performance
+- **Faster startup / session restore.** Restored tabs now mount their rich
+  editor lazily — only the active document spins up an editor on launch instead
+  of every restored tab parsing its whole document at once. Editors stay mounted
+  after first activation, so tab switches remain instant.
+- **Smoother typing in large documents.** The floating block-level badge now
+  coalesces its layout measurements to one per animation frame (it previously
+  forced a synchronous reflow on every caret move / keystroke), and the
+  selection-toolbar observer only re-scans when DOM nodes are actually added
+  (debounced per frame) instead of on every edit.
+
 ## [0.1.5] - 2026-06-08
 
 ### Added

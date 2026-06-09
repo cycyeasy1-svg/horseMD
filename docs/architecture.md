@@ -14,10 +14,11 @@
 ```
 ┌─────────────────────────────────────────────────────────┐
 │ 主进程 (src/main/index.js)                                │
-│  · BrowserWindow（无边框标题栏 + titleBarOverlay）          │
-│  · 单实例锁：第二次启动把文件转发给已有窗口（不新开程序）      │
-│  · 文件系统 IPC：读写/重命名/删除/新建/列目录               │
+│  · BrowserWindow（无边框标题栏；mac 红绿灯 / win 自绘按钮）   │
+│  · 单实例锁：第二次启动把文件/文件夹转发给已有窗口            │
+│  · 文件系统 IPC：读写/重命名/删除/新建/复制/列目录          │
 │  · 文件夹监听（刷新文件树） + 单文件监听（自动重载内容）       │
+│  · 窗口控制 IPC（win 自绘按钮）+ 导出 PDF + 更新检查         │
 │  · 应用菜单（主要用于快捷键加速器）                          │
 └───────────────▲───────────────────────────┬──────────────┘
                 │ ipcRenderer.invoke / on    │ 事件推送
@@ -95,7 +96,7 @@ build/
 
 > ⚠️ 这条链路曾经断过：监听器注册晚了导致 `markdownUpdated` 从不触发，详见 [implementation-notes.md](./implementation-notes.md)。
 
-> **编辑器路由**：`App.jsx` 按扩展名决定每个标签用哪种编辑器 —— `.md/.markdown/.mdx`（及无路径的新建文档）走 Crepe 富文本并常驻挂载；`.txt` 等纯文本走 `textarea`，只在激活时渲染。纯文本过 Markdown 引擎会丢换行、且大文件卡死，故单独走快路径（`MD_DOC_RE` / `isPlainTextDoc`）。
+> **编辑器路由**：`App.jsx` 按扩展名决定每个标签用哪种编辑器 —— `.md/.markdown/.mdx`（及无路径的新建文档）走 Crepe 富文本，**首次激活才挂载、之后常驻**（懒加载，加快启动/会话恢复）；`.txt` 等纯文本走 `textarea`，只在激活时渲染。纯文本过 Markdown 引擎会丢换行、且大文件卡死，故单独走快路径（`MD_DOC_RE` / `isPlainTextDoc`）。
 
 ## 获取 ProseMirror view 的正确姿势
 

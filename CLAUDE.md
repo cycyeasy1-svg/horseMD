@@ -42,7 +42,7 @@ src/renderer/src/
   components/{Sidebar,Tabs,Outline,CommandPalette,StatusBar,icons}.jsx
   {blocks,themes,i18n,onboarding}.{js,jsx}
   styles/app.css       all styles + theme variables
-build/                 icon.ico (Windows) + icon.icns (macOS)
+build/                 icon.ico (Windows) + icon.icns (macOS) + installer.nsh (NSIS uninstall: keep user files)
 scripts/               CDP-based e2e helpers (etv.mjs, inspect.mjs)
 docs/                  architecture / features / implementation-notes / development
 ```
@@ -55,9 +55,17 @@ docs/                  architecture / features / implementation-notes / developm
   - renderer: `window.api.platform` → an `.app.is-win` / `.app.is-mac` class on
     the root; write platform CSS under those selectors only.
   - title bar: `hiddenInset` + `trafficLightPosition` on macOS (top bar spans
-    full width, activity bar drops below the traffic lights); `titleBarOverlay`
-    on Windows. Keep both paths working when touching the top bar.
+    full width, activity bar drops below the traffic lights). On Windows the
+    native `titleBarOverlay` is **disabled** — the renderer draws its own
+    minimize/maximize/close buttons (`WindowControls` in `App.jsx`, gated to
+    `platform === 'win32'`), driven by `window:*` IPC; main pushes
+    `window:maximized` on `maximize`/`unmaximize` so the restore icon stays in
+    sync. Keep both paths working when touching the top bar, and always leave a
+    draggable area even when tabs fill the strip.
   - shortcuts accept both `Ctrl` and `Cmd` (`metaKey`).
+  - launch args: `extractArgs()` in `main/index.js` splits argv into markdown
+    **files** (→ `open-paths`, tabs) and **folders** (→ `open-folder`, workspace
+    — from the Explorer "Open with HorseMD" folder entry). Keep both handled.
 - **Markdown vs plain text.** Supported extensions are centralized:
   `MD_EXTS`/`MD_RE` in `main/index.js` (open dialog + folder scan), and
   `MD_DOC_RE` in `App.jsx`. `.md/.markdown/.mdx` open in the Crepe rich editor;
@@ -68,9 +76,24 @@ docs/                  architecture / features / implementation-notes / developm
   `crepe.editor.view` is `undefined` in this Milkdown version.
 - **Crepe content callback**: register `crepe.on(markdownUpdated)` **before**
   `crepe.create()`, or changes never fire (saves would write stale content).
+- **Lazy-mounted editors**: a rich tab's `<Editor>` is created only on its first
+  activation, then kept mounted (`mountedIds` in `App.jsx`). This keeps startup /
+  session-restore fast (restoring N tabs spins up one editor, not N). Code that
+  needs a tab's editor API (`editorApis[id]`) must activate the tab first — see
+  `exportPathToPdf`, which opens/activates then waits for `getDocHTML`.
+- **Raw HTML rendering**: Milkdown's `html` node shows markup as escaped text;
+  we add a ProseMirror node view (`renderHtmlNodeView` in `Editor.jsx`, wired via
+  `editorViewOptionsCtx.nodeViews`) that renders recognized block HTML (e.g.
+  `<table>`) as real, sanitized DOM. Display-only — the node round-trips through
+  `attrs.value`, so the saved Markdown keeps the original HTML.
 - **State**: session is `localStorage["minimd.session.v1"]`; onboarding flag is
-  `localStorage["horsemd.onboarded.v1"]`. Themes are `body` classes
+  `localStorage["horsemd.onboarded.v1"]`; dismissed update notice is
+  `localStorage["horsemd.update.dismissed"]`. Themes are `body` classes
   (`light|dark` + optional `theme-*`).
+- **Find**: in-document find uses the **CSS Custom Highlight API**
+  (`CSS.highlights` + `Highlight`), not `window.find` — it searches only the
+  editor body (rich `view.dom` / source `<textarea>`), never UI text, and paints
+  ranges without mutating the DOM. See the find helpers in `App.jsx`.
 - **Don't commit `dist/` or `out/`** (gitignored). `build/icon.*` IS tracked.
 
 ## Testing

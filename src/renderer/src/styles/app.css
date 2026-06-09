@@ -894,6 +894,30 @@ button:focus-visible,
 .milkdown { background: transparent !important; }
 .milkdown .ProseMirror { padding: 0 !important; }
 
+/* Rendered raw-HTML blocks (e.g. an HTML <table> in the Markdown). The node is
+   non-editable; we just give it sensible, theme-aware styling so a pasted
+   <table> looks like a table instead of escaped source. */
+.hm-html-block {
+  margin: 0.6em 0;
+  overflow-x: auto;
+}
+.hm-html-block table {
+  border-collapse: collapse;
+  width: 100%;
+}
+.hm-html-block th,
+.hm-html-block td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+  vertical-align: top;
+}
+.hm-html-block th {
+  background: var(--hover-elevated, var(--border-soft));
+  font-weight: 700;
+}
+.hm-html-block img { max-width: 100%; }
+
 /* Block-level hint: a small, quiet tag beside the caret's line naming the
    current block (H1…H6 / 正文). Non-interactive — purely an at-a-glance cue.
    Deliberately minimal: no border or shadow, muted by default. */

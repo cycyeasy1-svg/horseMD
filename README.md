@@ -29,21 +29,26 @@ interface speaks both **English and 中文**.
 - Seamless **WYSIWYG live preview** — type Markdown, see it render in place
 - Slash menu (`/`) for inserting blocks; smart lists, selection toolbar, link tooltips
 - Tables, fenced **code blocks with syntax highlighting**, **LaTeX math**, images, task lists, blockquotes
-- **Source mode** toggle (`Ctrl/Cmd+/`) for raw Markdown
+- **Source mode** toggle (`Ctrl/Cmd+/`) for raw Markdown — keeps scroll position
 - **Plain-text files (`.txt`) open in a fast plain editor** — no markdown reflow, instant on huge files
 - Rich-text copy with inline styles (paste into WeChat / email / Notion keeps formatting)
+- **Export to PDF** (`Ctrl/Cmd+Shift+E`) — clean print layout, no editor chrome
 - Relative-path images resolve against the file's folder (display only — your file stays untouched)
+- **Raw HTML tables** (`<table>…</table>` in the Markdown) render as real tables, like Typora — display only, the source is preserved
+- A floating **block-level badge** tracks the caret (H1…H6 / Text)
 
 **Beyond Typora**
 
 - **Tabs** — many files in one window (`Ctrl/Cmd+Tab` to cycle); a `+` in the top bar for a new doc
-- **Folder workspace** — a file tree with create / rename / delete / reveal, in place
-- **Open in the same window** — double-clicking a file in Finder/Explorer adds a tab instead of launching a new instance
+- **Folder workspace** — a file tree with create / rename / duplicate / delete / reveal / export-PDF, plus **drag-and-drop to move** and expand-all / collapse-all
+- **Open in the same window** — double-clicking a file in Finder/Explorer adds a tab; "Open with HorseMD" on a folder opens it as a workspace
 - **Command palette** (`Ctrl/Cmd+P`) — fuzzy-jump to any file or command
+- **Find in file** (`Ctrl/Cmd+F`) — highlights matches in the document with a live count
 - **Outline panel** (`Ctrl+Shift+L`) — click a heading to jump
 - Live word / character count & reading time
 - Session restore — reopens your folder and tabs
-- Auto-refreshing file tree — watches the folder for external changes
+- Auto-refreshing file tree & open files — watches for external changes
+- Notify-only update check — tells you when a new release is out (no auto-download)
 
 Command palette — fuzzy-jump to any file or command:
 
@@ -68,6 +73,7 @@ switchable with `Ctrl+Shift+T` or the status-bar picker.
 | Open file          | `Ctrl/Cmd+O`                  |
 | Open folder        | `Ctrl/Cmd+Shift+O`            |
 | Save / Save As     | `Ctrl/Cmd+S` / `…+Shift+S`    |
+| Export as PDF      | `Ctrl/Cmd+Shift+E`            |
 | Close tab          | `Ctrl/Cmd+W`                  |
 | Command palette    | `Ctrl/Cmd+P`                  |
 | Find in file       | `Ctrl/Cmd+F`                  |
