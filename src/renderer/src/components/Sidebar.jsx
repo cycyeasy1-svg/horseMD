@@ -12,6 +12,9 @@ const isMarkdownName = (name) => /\.(md|markdown|mdx)$/i.test(name)
 // would move it elsewhere or traverse out), and not "." / "..".
 const isValidName = (name) => !!name && !/[\\/:*?"<>|]/.test(name) && name !== '.' && name !== '..'
 
+// Does this fs error mean "a file/folder with that name already exists"?
+const isExistsError = (e) => /eexist|already exists/i.test(e?.message || '')
+
 export default function Sidebar({ workspace, activePath, onOpenFile, onExportPdf, refreshNonce }) {
   const { t } = useI18n()
   const [childrenMap, setChildrenMap] = useState({}) // path -> nodes[]
@@ -129,7 +132,11 @@ export default function Sidebar({ workspace, activePath, onOpenFile, onExportPdf
         setExpanded((s) => new Set(s).add(dir))
       }
     } catch (e) {
-      window.alert((type === 'file' ? t('err.createFile') : t('err.createFolder')) + e.message)
+      window.alert(
+        isExistsError(e)
+          ? t('err.nameExists')
+          : (type === 'file' ? t('err.createFile') : t('err.createFolder')) + e.message
+      )
     } finally {
       committingRef.current = false
     }
@@ -150,7 +157,7 @@ export default function Sidebar({ workspace, activePath, onOpenFile, onExportPdf
       await window.api.duplicate(node.path)
       await refreshParentOf(node.path)
     } catch (e) {
-      window.alert((t('err.duplicate') || 'Could not duplicate: ') + e.message)
+      window.alert(isExistsError(e) ? t('err.nameExists') : (t('err.duplicate') || 'Could not duplicate: ') + e.message)
     }
   }
 
@@ -189,7 +196,7 @@ export default function Sidebar({ workspace, activePath, onOpenFile, onExportPdf
     try {
       await window.api.rename(srcPath, join(destDir, baseName(srcPath)))
     } catch (e) {
-      window.alert((t('err.move') || 'Could not move: ') + e.message)
+      window.alert(isExistsError(e) ? t('err.nameExists') : (t('err.move') || 'Could not move: ') + e.message)
       return
     }
     await refreshParentOf(srcPath)
@@ -232,7 +239,7 @@ export default function Sidebar({ workspace, activePath, onOpenFile, onExportPdf
       await window.api.rename(path, join(parentDir(path), clean))
       await refreshParentOf(path)
     } catch (e) {
-      window.alert((t('err.rename') || 'Could not rename: ') + e.message)
+      window.alert(isExistsError(e) ? t('err.nameExists') : (t('err.rename') || 'Could not rename: ') + e.message)
     } finally {
       committingRef.current = false
     }
