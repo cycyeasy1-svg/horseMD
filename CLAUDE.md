@@ -82,10 +82,22 @@ docs/                  architecture / features / implementation-notes / developm
   needs a tab's editor API (`editorApis[id]`) must activate the tab first — see
   `exportPathToPdf`, which opens/activates then waits for `getDocHTML`.
 - **Raw HTML rendering**: Milkdown's `html` node shows markup as escaped text;
-  we add a ProseMirror node view (`renderHtmlNodeView` in `Editor.jsx`, wired via
-  `editorViewOptionsCtx.nodeViews`) that renders recognized block HTML (e.g.
-  `<table>`) as real, sanitized DOM. Display-only — the node round-trips through
-  `attrs.value`, so the saved Markdown keeps the original HTML.
+  we add a ProseMirror node view (`renderHtmlNodeView` in `Editor.jsx`) that
+  renders recognized block HTML (e.g. `<table>`) as real, sanitized DOM.
+  Display-only — the node round-trips through `attrs.value`, so the saved Markdown
+  keeps the original HTML. **Register it by appending to `nodeViewCtx`**
+  (`ctx.update(nodeViewCtx, v => [...v, ['html', …]])`), NOT by setting
+  `editorViewOptionsCtx.nodeViews` — the core spreads `editorViewOptionsCtx` last
+  into the EditorView, so the latter would overwrite every component node view
+  (image-block captions, CodeMirror, tables, list items). Same channel Milkdown's
+  `$view` uses; see [implementation-notes.md](./docs/implementation-notes.md).
+- **Closing the window** warns about unsaved changes: main defers `close`
+  (`allowClose` guard) and sends `app-close-request`; the renderer checks dirty
+  tabs and calls `confirmAppClose()` to let it close. Covers the macOS traffic
+  light, the Windows close button, and Cmd/Ctrl+Q (closing a tab is separate, in
+  `closeTab`).
+- **App version** is injected at build time via Vite `define` (`__APP_VERSION__`
+  in `electron.vite.config.mjs`, from `package.json`); shown on the welcome page.
 - **State**: session is `localStorage["minimd.session.v1"]`; onboarding flag is
   `localStorage["horsemd.onboarded.v1"]`; dismissed update notice is
   `localStorage["horsemd.update.dismissed"]`. Themes are `body` classes

@@ -49,6 +49,9 @@ interface speaks both **English and 中文**.
 - Live word / character count & reading time
 - Session restore — reopens your folder and tabs
 - Auto-refreshing file tree & open files — watches for external changes
+- **Home button** in the activity bar — back to the welcome page anytime (open tabs stay loaded)
+- **Loading skeleton** for large documents, so opening a big file isn't a blank pause
+- Unsaved-changes warning when closing the window or quitting (not just closing a tab)
 - Notify-only update check — tells you when a new release is out (no auto-download)
 
 Command palette — fuzzy-jump to any file or command:
