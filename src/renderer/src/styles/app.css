@@ -2147,6 +2147,28 @@ body.dark .milkdown {
   border-bottom: none;
 }
 
+/* Selected-node indicator. ProseMirror's default is a hard light-blue (#8cf) 2px
+   box that looks out of place; replace it with a subtle theme-aware ring (used
+   for images, raw-HTML blocks, etc.). */
+.milkdown .ProseMirror-selectednode {
+  outline: 2px solid var(--accent-soft);
+  outline-offset: 1px;
+  border-radius: var(--radius-sm);
+}
+/* Tables: don't draw any node/cell selection frame — clicking a cell shouldn't
+   box the table (it read as an ugly wireframe). Cell-range selection keeps its
+   soft fill. */
+.milkdown .milkdown-table-block.ProseMirror-selectednode,
+.milkdown .milkdown-table-block .ProseMirror-selectednode,
+.milkdown .milkdown-table-block th:has(.ProseMirror-selectednode),
+.milkdown .milkdown-table-block td:has(.ProseMirror-selectednode) {
+  outline: none;
+}
+/* Theme the column-resize handle (default is a hard blue #adf bar). */
+.milkdown .ProseMirror .column-resize-handle {
+  background-color: var(--accent);
+}
+
 /* Horizontal rule — elegant divider */
 .milkdown .ProseMirror hr {
   border: none;
