@@ -564,8 +564,9 @@ export default function App() {
       )
     )
     setRefreshNonce((n) => n + 1)
-    // On mobile, where files land in a system folder, confirm where it went.
-    if (isMobile) fireToast(tRef.current('save.savedTo', { name: baseName(targetPath) }))
+    // On mobile, where files land in a system folder, confirm where it went —
+    // sticky so the user can actually read the location before dismissing it.
+    if (isMobile) fireToast(tRef.current('save.savedTo', { name: baseName(targetPath) }), { sticky: true })
   }, [isMobile])
 
   const saveTab = useCallback(
@@ -960,11 +961,14 @@ export default function App() {
   useEffect(() => {
     let timer = null
     const onToast = (e) => {
-      const msg = e?.detail
+      const d = e?.detail
+      const msg = typeof d === 'string' ? d : d?.msg
+      const sticky = typeof d === 'object' && !!d?.sticky
       if (!msg) return
-      setToast({ msg, key: Date.now() + Math.random() })
+      setToast({ msg, key: Date.now() + Math.random(), sticky })
       clearTimeout(timer)
-      timer = setTimeout(() => setToast(null), 1600)
+      // Sticky toasts (e.g. "saved to …") stay until the user taps ✕.
+      if (!sticky) timer = setTimeout(() => setToast(null), 1600)
     }
     window.addEventListener(HM_TOAST_EVENT, onToast)
     return () => {
@@ -1400,8 +1404,13 @@ export default function App() {
       />
 
       {toast && (
-        <div className="hm-toast" role="status" key={toast.key}>
-          {toast.msg}
+        <div className={`hm-toast${toast.sticky ? ' sticky' : ''}`} role="status" key={toast.key}>
+          <span className="hm-toast-msg">{toast.msg}</span>
+          {toast.sticky && (
+            <button className="hm-toast-close" onClick={() => setToast(null)} aria-label="Close">
+              <Icon name="close" size={15} />
+            </button>
+          )}
         </div>
       )}
 

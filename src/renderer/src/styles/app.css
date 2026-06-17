@@ -984,6 +984,29 @@ button:focus-visible,
   pointer-events: none;
   animation: hm-toast-in 0.22s var(--ease-out);
 }
+/* Sticky toast (e.g. "saved to …"): stays until tapped, so it's interactive and
+   carries a ✕. Lets the message wrap instead of staying a one-line pill. */
+.hm-toast.sticky {
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 9px 9px 16px;
+  max-width: min(86vw, 460px);
+  border-radius: 16px;
+}
+.hm-toast.sticky .hm-toast-msg { line-height: 1.35; text-align: left; }
+.hm-toast-close {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  color: var(--bg-editor);
+  background: rgba(255, 255, 255, 0.16);
+}
+.hm-toast-close:active { background: rgba(255, 255, 255, 0.3); }
 @keyframes hm-toast-in {
   from { opacity: 0; transform: translateX(-50%) translateY(10px); }
   to { opacity: 1; transform: translateX(-50%) translateY(0); }
@@ -2835,13 +2858,17 @@ body.dark .milkdown {
 /* The "•••" is the only control on the right of the mobile status bar and the
    gateway to settings, so give it an obvious pill affordance + bigger target. */
 .app.is-mobile .hm-more-btn {
-  width: 46px;
-  height: 30px;
-  border-radius: 9px;
+  width: 40px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--muted);
+}
+.app.is-mobile .hm-more-btn:active {
   background: var(--hover);
   color: var(--text);
 }
-.app.is-mobile .hm-more-btn:active { background: var(--border-soft); }
 .app.is-mobile .hm-sheet-save { font-weight: 600; }
 .app.is-mobile .hm-sheet-save-dot {
   width: 7px;
