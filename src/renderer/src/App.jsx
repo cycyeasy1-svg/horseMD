@@ -967,20 +967,24 @@ export default function App() {
 
   // --------------------------- commands ----------------------------
   const commands = useMemo(
-    () => [
-      { id: 'cmd.new', title: t('cmd.new'), icon: 'file-plus', run: () => handlers.current.new() },
-      { id: 'cmd.open', title: t('cmd.open'), icon: 'file', run: () => handlers.current.open() },
-      { id: 'cmd.openFolder', title: t('cmd.openFolder'), icon: 'folder', run: () => handlers.current.openFolder() },
-      { id: 'cmd.save', title: t('cmd.save'), icon: 'save', run: () => handlers.current.save() },
-      { id: 'cmd.saveAs', title: t('cmd.saveAs'), icon: 'save', run: () => handlers.current.saveAs() },
-      { id: 'cmd.exportPdf', title: t('cmd.exportPdf'), icon: 'file', run: () => handlers.current.exportPdf() },
-      { id: 'cmd.sidebar', title: t('cmd.sidebar'), icon: 'sidebar', run: () => handlers.current.toggleSidebar() },
-      { id: 'cmd.files', title: t('cmd.files'), icon: 'folder', run: () => handlers.current.toggleFiles() },
-      { id: 'cmd.outline', title: t('cmd.outline'), icon: 'outline', run: () => handlers.current.toggleOutline() },
-      { id: 'cmd.source', title: t('cmd.source'), icon: 'code', run: () => handlers.current.toggleSource() },
-      { id: 'cmd.theme', title: t('cmd.theme'), icon: 'moon', run: () => handlers.current.toggleTheme() },
-      { id: 'cmd.find', title: t('cmd.find'), icon: 'search', run: () => handlers.current.find() }
-    ],
+    () => {
+      const caps = window.api.capabilities || {}
+      return [
+        { id: 'cmd.new', title: t('cmd.new'), icon: 'file-plus', run: () => handlers.current.new() },
+        { id: 'cmd.open', title: t('cmd.open'), icon: 'file', run: () => handlers.current.open() },
+        { id: 'cmd.openFolder', title: t('cmd.openFolder'), icon: 'folder', run: () => handlers.current.openFolder() },
+        { id: 'cmd.save', title: t('cmd.save'), icon: 'save', run: () => handlers.current.save() },
+        { id: 'cmd.saveAs', title: t('cmd.saveAs'), icon: 'save', run: () => handlers.current.saveAs() },
+        // Export-to-PDF needs a save dialog / print pipeline that doesn't exist on mobile.
+        caps.pdfExport && { id: 'cmd.exportPdf', title: t('cmd.exportPdf'), icon: 'file', run: () => handlers.current.exportPdf() },
+        { id: 'cmd.sidebar', title: t('cmd.sidebar'), icon: 'sidebar', run: () => handlers.current.toggleSidebar() },
+        { id: 'cmd.files', title: t('cmd.files'), icon: 'folder', run: () => handlers.current.toggleFiles() },
+        { id: 'cmd.outline', title: t('cmd.outline'), icon: 'outline', run: () => handlers.current.toggleOutline() },
+        { id: 'cmd.source', title: t('cmd.source'), icon: 'code', run: () => handlers.current.toggleSource() },
+        { id: 'cmd.theme', title: t('cmd.theme'), icon: 'moon', run: () => handlers.current.toggleTheme() },
+        { id: 'cmd.find', title: t('cmd.find'), icon: 'search', run: () => handlers.current.find() }
+      ].filter(Boolean)
+    },
     [t]
   )
 

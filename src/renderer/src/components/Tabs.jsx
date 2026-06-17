@@ -122,7 +122,7 @@ export default function Tabs({
               const run = (fn) => () => { fn(); setMenu(null) }
               return (
                 <>
-                  {onOpenRight && tabs.length > 1 && (
+                  {window.api.capabilities?.splitView !== false && onOpenRight && tabs.length > 1 && (
                     <>
                       <button className="tab-menu-item" onClick={run(() => onOpenRight(tab.id))}>
                         {t('tab.openRight')}
@@ -136,9 +136,11 @@ export default function Tabs({
                   <button className="tab-menu-item" onClick={run(() => copyName(tab))}>
                     {t('tab.copyName')}
                   </button>
-                  <button className="tab-menu-item" disabled={!hasPath} title={noPathTip} onClick={run(() => reveal(tab))}>
-                    {t('tab.reveal')}
-                  </button>
+                  {window.api.capabilities?.revealInFolder !== false && (
+                    <button className="tab-menu-item" disabled={!hasPath} title={noPathTip} onClick={run(() => reveal(tab))}>
+                      {t('tab.reveal')}
+                    </button>
+                  )}
                   <div className="tab-menu-sep" />
                   <button className="tab-menu-item" disabled={!hasPath} title={noPathTip} onClick={run(() => onRename?.(tab.id))}>
                     {t('side.rename')}
@@ -146,7 +148,7 @@ export default function Tabs({
                   <button className="tab-menu-item" disabled={!hasPath} title={noPathTip} onClick={run(() => onDuplicate?.(tab.id))}>
                     {t('side.duplicate')}
                   </button>
-                  {hasPath && isMarkdownName(tab.title) && (
+                  {window.api.capabilities?.pdfExport !== false && hasPath && isMarkdownName(tab.title) && (
                     <button className="tab-menu-item" onClick={run(() => onExportPdf?.(tab.path))}>
                       {t('side.exportPdf')}
                     </button>

@@ -224,11 +224,12 @@ const capabilities = {
   folderWorkspace: false, // iOS sandbox; Android SAF comes later
   watch: false,
   windowControls: false,
-  pdfExport: false,
+  pdfExport: false, // no print-to-PDF save dialog on mobile
   imageHostExec: false,
   nativeMenus: false,
   externalShell: true,
-  revealInFolder: false
+  revealInFolder: false, // no Finder/Explorer on mobile
+  splitView: false // not enough width on a phone
 }
 
 export function makeCapacitorApi() {

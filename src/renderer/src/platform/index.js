@@ -18,7 +18,8 @@ const DESKTOP_CAPABILITIES = {
   imageHostExec: true,
   nativeMenus: true,
   externalShell: true,
-  revealInFolder: true
+  revealInFolder: true,
+  splitView: true
 }
 
 if (typeof window !== 'undefined') {
