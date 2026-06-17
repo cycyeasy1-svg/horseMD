@@ -2831,3 +2831,14 @@ body.dark .milkdown {
 .app.is-mobile .hm-sheet-swatch-custom { background: var(--accent); }
 .app.is-mobile .hm-sheet-langs { display: flex; gap: 4px; }
 .app.is-mobile .hm-sheet-langs .block-menu-item { flex: 1; justify-content: center; }
+
+/* The "•••" is the only control on the right of the mobile status bar and the
+   gateway to settings, so give it an obvious pill affordance + bigger target. */
+.app.is-mobile .hm-more-btn {
+  width: 46px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--hover);
+  color: var(--text);
+}
+.app.is-mobile .hm-more-btn:active { background: var(--border-soft); }

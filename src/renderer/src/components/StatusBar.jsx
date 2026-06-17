@@ -288,8 +288,8 @@ function MobileMore({
   }
   return (
     <div className="block-switch" ref={ref}>
-      <button className="status-btn" onClick={toggle} title={t('status.more')}>
-        <Icon name="more" size={16} />
+      <button className="status-btn hm-more-btn" onClick={toggle} title={t('status.more')}>
+        <Icon name="more" size={22} />
       </button>
       {open && (
         <div className="block-switch-menu hm-status-sheet">
@@ -407,7 +407,7 @@ export default function StatusBar({
         )}
       </div>
       <div className="status-right">
-        {tab && !sourceMode && <BlockSwitcher activeBlock={activeBlock} onPickBlock={onPickBlock} />}
+        {!isMobile && tab && !sourceMode && <BlockSwitcher activeBlock={activeBlock} onPickBlock={onPickBlock} />}
         {isMobile ? (
           tab && (
             <MobileMore
