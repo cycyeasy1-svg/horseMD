@@ -2846,6 +2846,10 @@ body.dark .milkdown {
    is always full width here) and the desktop keyboard-shortcut hints. */
 .app.is-mobile .hm-pagewidth { display: none; }
 .app.is-mobile .welcome-hints { display: none; }
+/* The floating "Text / H1" caret badge is desktop affordance; drop it on phones. */
+.app.is-mobile .hm-level-badge { display: none !important; }
+/* No window-drag handle needed on touch — let tabs use the full width. */
+.app.is-mobile .topbar-spacer { min-width: 0; }
 
 /* "•••" sheet that folds the crowded status-bar controls into one menu. */
 .app.is-mobile .hm-status-sheet { min-width: 232px; max-width: 80vw; }

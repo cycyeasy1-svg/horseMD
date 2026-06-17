@@ -747,7 +747,10 @@ export default function App() {
 
   const handlers = useRef({})
   handlers.current = {
-    home: () => setHome(true),
+    home: () => {
+      setHome(true)
+      if (isMobile) setSidebarOpen(false) // jump straight to Home, don't leave the drawer over it
+    },
     new: newTab,
     open: async () => openPaths(await window.api.openFiles()),
     openFolder,
@@ -1200,7 +1203,7 @@ export default function App() {
               <Sidebar
                 workspace={workspace}
                 activePath={activePath}
-                onOpenFile={(p) => openPaths([p])}
+                onOpenFile={(p) => { openPaths([p]); if (isMobile) setSidebarOpen(false) }}
                 onOpenRight={openFileRight}
                 onExportPdf={exportPathToPdf}
                 refreshNonce={refreshNonce}
@@ -1400,7 +1403,7 @@ export default function App() {
         onClose={() => setPaletteOpen(false)}
         commands={commands}
         files={files}
-        onOpenFile={(p) => openPaths([p])}
+        onOpenFile={(p) => { openPaths([p]); if (isMobile) setSidebarOpen(false) }}
       />
 
       {toast && (
