@@ -3,9 +3,11 @@
   "appName": "HorseMD",
   "webDir": "dist-mobile",
   "ios": {
-    "contentInset": "always"
+    "contentInset": "never",
+    "backgroundColor": "#fdfbf7"
   },
   "android": {
-    "allowMixedContent": false
+    "allowMixedContent": false,
+    "backgroundColor": "#fdfbf7"
   }
 }

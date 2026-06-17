@@ -2725,6 +2725,24 @@ body.dark .milkdown {
   padding-right: 18px !important;
 }
 
+/* Typography tuned for a phone: the desktop heading scale (h1 = 2.25em ≈ 36px)
+   is oversized on a narrow column, so step the headings down and tighten the
+   space above them; keep body at 16px for comfortable reading. */
+.app.is-mobile .milkdown .ProseMirror { line-height: 1.7; }
+.app.is-mobile .milkdown .ProseMirror h1 { font-size: 1.75em; }
+.app.is-mobile .milkdown .ProseMirror h2 { font-size: 1.42em; }
+.app.is-mobile .milkdown .ProseMirror h3 { font-size: 1.2em; }
+.app.is-mobile .milkdown .ProseMirror h4 { font-size: 1.1em; }
+.app.is-mobile .milkdown .ProseMirror h1,
+.app.is-mobile .milkdown .ProseMirror h2,
+.app.is-mobile .milkdown .ProseMirror h3,
+.app.is-mobile .milkdown .ProseMirror h4,
+.app.is-mobile .milkdown .ProseMirror h5,
+.app.is-mobile .milkdown .ProseMirror h6 {
+  margin-top: 1.3em;
+  margin-bottom: 0.5em;
+}
+
 /* ---- Slide-in drawer: activity rail + sidebar panel ---- */
 /* Both are positioned against .app and hidden off-screen by default. */
 .app.is-mobile .activity-bar {
