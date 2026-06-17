@@ -988,14 +988,27 @@ button:focus-visible,
    carries a ✕. Lets the message wrap instead of staying a one-line pill. */
 .hm-toast.sticky {
   pointer-events: auto;
+  /* Center it on screen (works the same on iOS & Android WebViews). */
+  top: 50%;
+  bottom: auto;
+  transform: translate(-50%, -50%);
+  animation: hm-toast-center-in 0.18s var(--ease-out);
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
-  padding: 9px 9px 9px 16px;
+  padding: 14px 12px 14px 18px;
   max-width: min(86vw, 460px);
   border-radius: 16px;
 }
-.hm-toast.sticky .hm-toast-msg { line-height: 1.35; text-align: left; }
+.hm-toast.sticky .hm-toast-msg {
+  line-height: 1.45;
+  text-align: left;
+  white-space: pre-line; /* render the \n separators as real line breaks */
+}
+@keyframes hm-toast-center-in {
+  from { opacity: 0; transform: translate(-50%, -46%); }
+  to { opacity: 1; transform: translate(-50%, -50%); }
+}
 .hm-toast-close {
   flex: none;
   display: grid;
@@ -2858,12 +2871,15 @@ body.dark .milkdown {
 /* The "•••" is the only control on the right of the mobile status bar and the
    gateway to settings, so give it an obvious pill affordance + bigger target. */
 .app.is-mobile .hm-more-btn {
-  width: 40px;
   height: 28px;
-  border-radius: 8px;
+  padding: 0 12px 0 9px;
+  gap: 5px;
+  border-radius: 999px;
   border: 1px solid var(--border);
   background: transparent;
   color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
 }
 .app.is-mobile .hm-more-btn:active {
   background: var(--hover);

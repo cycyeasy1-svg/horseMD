@@ -291,7 +291,8 @@ function MobileMore({
   return (
     <div className="block-switch" ref={ref}>
       <button className="status-btn hm-more-btn" onClick={toggle} title={t('status.more')}>
-        <Icon name="more" size={18} />
+        <Icon name="more" size={16} />
+        <span>{t('status.more')}</span>
       </button>
       {open && (
         <div className="block-switch-menu hm-status-sheet">
