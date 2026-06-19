@@ -2886,18 +2886,20 @@ body.dark .milkdown {
 
 /* The "•••" is the only control on the right of the mobile status bar and the
    gateway to settings, so give it an obvious pill affordance + bigger target. */
-/* Borderless text button — just "⋯ More", no box. */
-.app.is-mobile .hm-more-btn {
+/* Borderless icon+text buttons in the bottom bar ("Export", "⋯ More"). */
+.app.is-mobile .hm-more-btn,
+.app.is-mobile .hm-share-btn {
   height: 28px;
-  padding: 0 4px;
-  gap: 5px;
+  padding: 0 6px;
+  gap: 4px;
   border: none;
   background: transparent;
   color: var(--muted);
   font-size: 12px;
   font-weight: 500;
 }
-.app.is-mobile .hm-more-btn:active { color: var(--text); }
+.app.is-mobile .hm-more-btn:active,
+.app.is-mobile .hm-share-btn:active { color: var(--text); }
 
 /* Word / char / read counts shown inline at the bottom (moved out of the menu). */
 .app.is-mobile .status-left { gap: 8px; }

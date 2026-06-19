@@ -270,7 +270,6 @@ function LangSwitch({ lang, setLang }) {
 function MobileMore({
   dirty,
   onSave,
-  onShare,
   sourceMode,
   onToggleSource,
   theme,
@@ -307,18 +306,6 @@ function MobileMore({
             <span className="block-menu-name">{t('status.save')}</span>
             {dirty && <span className="hm-sheet-save-dot" />}
           </button>
-          {window.api.capabilities?.canShare && (
-            <button
-              className="block-menu-item"
-              onClick={() => {
-                onShare?.()
-                setOpen(false)
-              }}
-            >
-              <Icon name="share" size={15} />
-              <span className="block-menu-name">{t('status.share')}</span>
-            </button>
-          )}
           <div className="theme-menu-sep" />
           <button
             className="block-menu-item"
@@ -439,21 +426,28 @@ export default function StatusBar({
         {!isMobile && tab && !sourceMode && <BlockSwitcher activeBlock={activeBlock} onPickBlock={onPickBlock} />}
         {isMobile ? (
           tab && (
-            <MobileMore
-              dirty={dirty}
-              onSave={onSave}
-              onShare={onShare}
-              sourceMode={sourceMode}
-              onToggleSource={onToggleSource}
-              theme={theme}
-              setTheme={setTheme}
-              lang={lang}
-              setLang={setLang}
-              customThemes={customThemes}
-              customTheme={customTheme}
-              onPickCustom={onPickCustom}
-              onRefreshThemes={onRefreshThemes}
-            />
+            <>
+              {window.api.capabilities?.canShare && (
+                <button className="status-btn hm-share-btn" onClick={onShare} title={t('status.share')}>
+                  <Icon name="share" size={17} />
+                  <span>{t('status.shareShort')}</span>
+                </button>
+              )}
+              <MobileMore
+                dirty={dirty}
+                onSave={onSave}
+                sourceMode={sourceMode}
+                onToggleSource={onToggleSource}
+                theme={theme}
+                setTheme={setTheme}
+                lang={lang}
+                setLang={setLang}
+                customThemes={customThemes}
+                customTheme={customTheme}
+                onPickCustom={onPickCustom}
+                onRefreshThemes={onRefreshThemes}
+              />
+            </>
           )
         ) : (
           <>

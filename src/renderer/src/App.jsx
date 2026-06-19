@@ -726,6 +726,9 @@ export default function App() {
     // active editor is hidden and editorHostRef isn't attached, so the jump
     // would silently do nothing. setHome(false) is a no-op when already not home.
     setHome(false)
+    // On mobile the outline lives in the drawer; close it so the jumped-to
+    // content is actually visible instead of hidden behind the drawer.
+    if (isMobile) setSidebarOpen(false)
     const doJump = () => {
       const host = editorHostRef.current
       if (!host) return false
