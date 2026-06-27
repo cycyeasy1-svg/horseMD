@@ -1823,6 +1823,54 @@ body.hm-full-width .editor-skeleton {
   margin: 0.6em 0;
   overflow-x: auto;
 }
+/* YAML front matter card (--- block at the top of a doc). */
+.hm-frontmatter-wrap { margin: 0 0 1.4em; }
+.hm-frontmatter {
+  border: 1px solid var(--border-soft);
+  border-radius: var(--radius-md);
+  background: var(--bg-elevated);
+  overflow: hidden;
+  font-size: 0.9em;
+}
+.hm-frontmatter-head {
+  padding: 5px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--accent-strong);
+  background: var(--accent-soft);
+}
+.hm-frontmatter-grid {
+  display: grid;
+  grid-template-columns: max-content 1fr;
+  gap: 0;
+  margin: 0;
+  padding: 8px 14px;
+}
+.hm-frontmatter-grid dt {
+  grid-column: 1;
+  color: var(--muted);
+  font-weight: 500;
+  padding: 3px 16px 3px 0;
+  white-space: nowrap;
+}
+.hm-frontmatter-grid dd {
+  grid-column: 2;
+  margin: 0;
+  padding: 3px 0;
+  color: var(--text);
+  word-break: break-word;
+}
+.hm-frontmatter-raw {
+  margin: 0;
+  padding: 10px 14px;
+  font-family: var(--font-mono);
+  font-size: 12.5px;
+  color: var(--text);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
 .hm-html-block table {
   border-collapse: collapse;
   width: 100%;
