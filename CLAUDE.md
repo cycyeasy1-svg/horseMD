@@ -137,11 +137,11 @@ docs/                  architecture / features / implementation-notes / developm
   restore recreates them (with `savedContent: ''` so they stay marked unsaved).
   Saved files are still reopened from disk via `openPaths`. The onboarding/welcome
   doc is skipped if either `openPaths` or `untitled` is present.
-- **State**: session is `localStorage["minimd.session.v1"]` (includes the selected
+- **State**: session is `localStorage["easymarkdown.session.v1"]` (includes the selected
   `customTheme`); prefs (page width, image-host command) are
-  `localStorage["horsemd.settings.v1"]` (`settings.js`); onboarding flag is
-  `localStorage["horsemd.onboarded.v1"]`; dismissed update notice is
-  `localStorage["horsemd.update.dismissed"]`. Themes are `body` classes
+  `localStorage["easymarkdown.settings.v1"]` (`settings.js`); onboarding flag is
+  `localStorage["easymarkdown.onboarded.v1"]`; dismissed update notice is
+  `localStorage["easymarkdown.update.dismissed"]`. Themes are `body` classes
   (`light|dark` + optional `theme-*`), with custom themes as an injected `<style>`.
 - **Find**: in-document find uses the **CSS Custom Highlight API**
   (`CSS.highlights` + `Highlight`), not `window.find` — it searches only the

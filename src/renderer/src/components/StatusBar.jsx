@@ -19,6 +19,20 @@ import {
 
 const zoomPct = (z) => Math.round(z * 100) + '%'
 
+// Render a short string with **bold** spans (used by the one-time mode hint).
+function boldMd(s) {
+  return String(s)
+    .split(/(\*\*[^*]+\*\*)/)
+    .filter(Boolean)
+    .map((seg, i) =>
+      seg.startsWith('**') && seg.endsWith('**') ? (
+        <strong key={i}>{seg.slice(2, -2)}</strong>
+      ) : (
+        <span key={i}>{seg}</span>
+      )
+    )
+}
+
 // App version, injected at build time from package.json (see electron.vite.config).
 const APP_VERSION = typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : ''
 const ORIGINAL_AUTHOR = 'Evan Yang'
@@ -554,6 +568,8 @@ export default function StatusBar({
   keepEligible,
   keepMode,
   onToggleKeep,
+  showModeHint,
+  onDismissModeHint,
   pageWidth,
   onSetPageWidth,
   fontSize,
@@ -637,13 +653,35 @@ export default function StatusBar({
           <>
             {tab && <StatsControl stats={s} />}
             {keepEligible && (
-              <button
-                className={`status-btn${keepMode ? ' active' : ''}`}
-                onClick={onToggleKeep}
-                title={t('tip.toggleKeep')}
-              >
-                <Icon name="shield" size={14} /> {keepMode ? t('mode.keep') : t('mode.rich')}
-              </button>
+              <span className="mode-switch-wrap">
+                <button
+                  className={`status-btn${keepMode ? ' active' : ''}`}
+                  onClick={onToggleKeep}
+                  title={t('tip.toggleKeep')}
+                >
+                  <Icon name="shield" size={14} /> {keepMode ? t('mode.keep') : t('mode.rich')}
+                </button>
+                {showModeHint && (
+                  <div className="mode-hint" role="dialog">
+                    <button
+                      className="mode-hint-close"
+                      onClick={onDismissModeHint}
+                      aria-label={t('hint.gotIt')}
+                    >
+                      ✕
+                    </button>
+                    <div className="mode-hint-title">{t('hint.modeTitle')}</div>
+                    <p className="mode-hint-line">{boldMd(t('hint.modeKeep'))}</p>
+                    <p className="mode-hint-line">{boldMd(t('hint.modeRich'))}</p>
+                    <div className="mode-hint-actions">
+                      <button className="mode-hint-ok" onClick={onDismissModeHint}>
+                        {t('hint.gotIt')}
+                      </button>
+                    </div>
+                    <span className="mode-hint-arrow" />
+                  </div>
+                )}
+              </span>
             )}
             <button className="status-btn" onClick={onToggleSource} title={t('tip.toggleSource')}>
               <Icon name="code" size={14} /> {sourceMode ? t('status.source') : t('status.rich')}

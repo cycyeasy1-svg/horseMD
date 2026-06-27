@@ -310,7 +310,7 @@ ipcMain.handle('export:pdf', async (_e, { html, defaultName }) => {
 
   const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${PDF_CSS}</style></head><body><div class="doc">${html}</div></body></html>`
 
-  const tmp = join(app.getPath('temp'), `horsemd-export-${Date.now()}.html`)
+  const tmp = join(app.getPath('temp'), `easymarkdown-export-${Date.now()}.html`)
   await fs.writeFile(tmp, doc, 'utf8')
   const win = new BrowserWindow({ show: false, webPreferences: { webSecurity: false } })
   try {
@@ -639,7 +639,7 @@ ipcMain.handle('image:upload', async (_e, command, name, bytes) => {
   if (!command || !String(command).trim()) return { ok: false, error: 'No upload command configured.' }
   let dir
   try {
-    dir = await fs.mkdtemp(join(tmpdir(), 'horsemd-img-'))
+    dir = await fs.mkdtemp(join(tmpdir(), 'easymarkdown-img-'))
     const safe = (name || 'image.png').replace(/[\\/:*?"<>|]/g, '_') || 'image.png'
     const file = join(dir, safe)
     await fs.writeFile(file, Buffer.from(bytes))

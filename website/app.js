@@ -46,7 +46,7 @@ const I18N = {
   },
 }
 
-const LANG_KEY = 'horsemd.site.lang'
+const LANG_KEY = 'easymarkdown.site.lang'
 let lang = localStorage.getItem(LANG_KEY)
   || (navigator.language && navigator.language.toLowerCase().startsWith('zh') ? 'zh' : 'en')
 

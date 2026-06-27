@@ -3,7 +3,7 @@
 // the image-host upload command. Kept small and self-contained so the Settings
 // modal and App can share one source of truth.
 
-export const SETTINGS_KEY = 'horsemd.settings.v1'
+export const SETTINGS_KEY = 'easymarkdown.settings.v1'
 
 // Page-width slider bounds (px). 'full' (a preset, not a slider value) fills the
 // pane instead.

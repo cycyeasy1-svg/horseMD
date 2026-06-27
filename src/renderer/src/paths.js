@@ -21,6 +21,22 @@ export const isAbsolutePath = (p) =>
   typeof p === 'string' && (/^\//.test(p) || /^[a-zA-Z]:[\\/]/.test(p) || /^\\\\/.test(p))
 export const sanitizeWorkspace = (ws) => (ws && isAbsolutePath(ws.rootPath) ? ws : null)
 
+// Multi-root workspaces: keep only absolute-path roots, de-duplicated by rootPath,
+// each normalized to { rootPath, rootName }. `legacy` is the old single-workspace
+// session field — when no array exists, fall back to it so upgrading users keep
+// the folder they had open (it just becomes the first root).
+export const sanitizeWorkspaces = (input, legacy) => {
+  const arr = Array.isArray(input) ? input : (legacy ? [legacy] : [])
+  const seen = new Set()
+  const out = []
+  for (const w of arr) {
+    if (!w || !isAbsolutePath(w.rootPath) || seen.has(w.rootPath)) continue
+    seen.add(w.rootPath)
+    out.push({ rootPath: w.rootPath, rootName: w.rootName || baseName(w.rootPath) })
+  }
+  return out
+}
+
 export const baseName = (p) => (p ? p.split(/[\\/]/).pop() : 'Untitled')
 export const dirName = (p) => (p ? p.replace(/[\\/][^\\/]*$/, '') : '')
 export const joinPath = (dir, name) => `${dir.replace(/[\\/]+$/, '')}/${name}`
@@ -62,7 +78,7 @@ export function isHeavyDoc(content) {
 let idCounter = 0
 export const genId = () => `t${++idCounter}_${Date.now()}`
 
-export const LS = 'minimd.session.v1'
+export const LS = 'easymarkdown.session.v1'
 export const loadSession = () => {
   try {
     return JSON.parse(localStorage.getItem(LS)) || {}

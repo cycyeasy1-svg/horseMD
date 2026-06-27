@@ -80,6 +80,8 @@ export const STRINGS = {
     // sidebar
     'side.noFolder': 'No folder open',
     'side.openFolder': 'Open Folder',
+    'side.addFolder': 'Add folder to sidebar',
+    'side.removeFolder': 'Remove folder from sidebar',
     'side.newFile': 'New file',
     'side.newFolder': 'New folder',
     'side.collapseAll': 'Collapse all',
@@ -242,6 +244,11 @@ export const STRINGS = {
     'cmd.toggleKeep': 'Toggle Editor Mode (Keep / Milkdown)',
     'confirm.switchKeepUnsaved':
       'Milkdown may have reformatted this document. Switching back to Keep mode keeps the reformatted text and could introduce diffs. Switch anyway?',
+    'hint.modeTitle': 'Two editing modes',
+    'hint.modeKeep': '**Keep** — source-backed, saves a zero-diff result. Default for .md.',
+    'hint.modeRich': '**Milkdown** — free WYSIWYG, but rewrites the file and may change its formatting.',
+    'hint.modeSwitch': 'Switch anytime with this button.',
+    'hint.gotIt': 'Got it',
 
     // update
     'update.title': 'Update available',
@@ -319,6 +326,8 @@ export const STRINGS = {
 
     'side.noFolder': '未打开文件夹',
     'side.openFolder': '打开文件夹',
+    'side.addFolder': '添加文件夹到侧边栏',
+    'side.removeFolder': '从侧边栏移除文件夹',
     'side.newFile': '新建文件',
     'side.newFolder': '新建文件夹',
     'side.collapseAll': '全部折叠',
@@ -473,6 +482,11 @@ export const STRINGS = {
     'cmd.toggleKeep': '切换编辑器模式(保持 / Milkdown)',
     'confirm.switchKeepUnsaved':
       'Milkdown 可能已重排该文档。切回保持模式会沿用重排后的文本,可能引入差分。仍要切换吗?',
+    'hint.modeTitle': '两种编辑模式',
+    'hint.modeKeep': '**保持** —— 以原文为正本，保存零差分。.md 默认用它。',
+    'hint.modeRich': '**Milkdown** —— 自由所见即所得，但会重写文件、可能改变原有格式。',
+    'hint.modeSwitch': '随时用这个按钮切换。',
+    'hint.gotIt': '知道了',
 
     'update.title': '发现新版本',
     'update.whatsNew': '更新内容',
@@ -553,6 +567,8 @@ export const STRINGS = {
     // sidebar
     'side.noFolder': 'フォルダが開かれていません',
     'side.openFolder': 'フォルダを開く',
+    'side.addFolder': 'サイドバーにフォルダを追加',
+    'side.removeFolder': 'サイドバーからフォルダを削除',
     'side.newFile': '新規ファイル',
     'side.newFolder': '新規フォルダ',
     'side.collapseAll': 'すべて折りたたむ',
@@ -715,6 +731,11 @@ export const STRINGS = {
     'cmd.toggleKeep': 'エディタモードを切り替え（キープ / Milkdown）',
     'confirm.switchKeepUnsaved':
       'Milkdown がこのドキュメントを再整形した可能性があります。キープモードに戻すと再整形後のテキストが引き継がれ、差分が生じる場合があります。切り替えてもよろしいですか？',
+    'hint.modeTitle': '2 つの編集モード',
+    'hint.modeKeep': '**キープ** —— 原文を正本とし、保存は差分ゼロ。.md の既定です。',
+    'hint.modeRich': '**Milkdown** —— 自由な WYSIWYG。ただしファイルを書き換え、書式が変わることがあります。',
+    'hint.modeSwitch': 'このボタンでいつでも切り替えられます。',
+    'hint.gotIt': '了解',
 
     // update
     'update.title': '新しいバージョンがあります',

@@ -4,7 +4,7 @@ import { useI18n } from '../i18n.jsx'
 import { baseName, dirName as parentDir, joinPath as join, isMarkdownName, isValidName, isExistsError } from '../paths.js'
 import { copyToClipboard } from '../ui.js'
 
-export default function Sidebar({ workspace, activePath, openTabPaths, openTabPathsRaw, onOpenFile, onOpenRight, onExportPdf, refreshNonce }) {
+export default function Sidebar({ workspaces, activePath, openTabPaths, openTabPathsRaw, onOpenFile, onOpenRight, onExportPdf, onAddFolder, onRemoveFolder, onReorderFolder, refreshNonce }) {
   const { t } = useI18n()
   const copyText = (text) => copyToClipboard(text, t('code.copied'))
   const [childrenMap, setChildrenMap] = useState({}) // path -> nodes[]
@@ -20,6 +20,11 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
   // drop target (for highlighting).
   const dragPathRef = useRef(null)
   const [dragOver, setDragOver] = useState(null)
+  // Separate channel for reordering workspace roots by dragging their headers (vs
+  // dragPathRef, which moves files/folders INTO a directory). rootDrop marks the
+  // hovered root + side ('before'|'after') so we can draw an insertion line.
+  const dragRootRef = useRef(null)
+  const [rootDrop, setRootDrop] = useState(null) // { path, pos }
   // Live mirror of childrenMap so the "follow active file" effect can check what's
   // already loaded without re-running every time the map changes.
   const childrenRef = useRef(childrenMap)
@@ -33,25 +38,37 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
   // folder the user later collapses by hand (reset when the workspace changes).
   const revealedRef = useRef(new Set())
 
+  const roots = workspaces || []
+  // Stable identity for the set of roots, so the init effect only re-runs when the
+  // roots actually change (childrenMap/expanded are keyed by absolute path, so they
+  // happily hold many roots' subtrees at once).
+  const rootsKey = roots.map((w) => w.rootPath).join('\n')
+
   const loadDir = useCallback(async (dir) => {
     const nodes = await window.api.readDir(dir)
     setChildrenMap((m) => ({ ...m, [dir]: nodes }))
     return nodes
   }, [])
 
-  // Initial / workspace change
+  // Load + expand any root we haven't seen yet, leaving already-loaded roots'
+  // expansion and children untouched — adding a folder must not collapse the
+  // others. (Removed roots just stop rendering; their cached children are inert.)
   useEffect(() => {
-    if (!workspace) return
-    setExpanded(new Set([workspace.rootPath]))
-    setChildrenMap({})
-    setCreating(null)
-    revealedRef.current = new Set()
-    loadDir(workspace.rootPath)
-  }, [workspace, loadDir])
+    if (!roots.length) return
+    const newRoots = roots.filter((w) => childrenRef.current[w.rootPath] === undefined)
+    if (!newRoots.length) return
+    setExpanded((s) => {
+      const n = new Set(s)
+      newRoots.forEach((w) => n.add(w.rootPath))
+      return n
+    })
+    newRoots.forEach((w) => loadDir(w.rootPath))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootsKey, loadDir])
 
   // Refresh all currently-loaded dirs when the watcher fires
   useEffect(() => {
-    if (!workspace || refreshNonce === 0) return
+    if (!roots.length || refreshNonce === 0) return
     Object.keys(childrenMap).forEach((dir) => loadDir(dir))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [refreshNonce])
@@ -62,12 +79,16 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
   // Used both to follow the active file and to surface restored open tabs.
   const revealAncestors = useCallback(
     async (paths, isCancelled) => {
-      if (!workspace) return
+      if (!roots.length) return
       const norm = (p) => p.replace(/\\/g, '/')
-      const root = norm(workspace.rootPath)
+      const rootPaths = roots.map((w) => norm(w.rootPath))
       const ancestors = new Set()
       for (const p of paths) {
-        if (!p || !norm(p).startsWith(root + '/')) continue // skip files outside this workspace
+        if (!p) continue
+        const np = norm(p)
+        // Find the root that owns this path; skip files outside every workspace.
+        const root = rootPaths.find((r) => np.startsWith(r + '/'))
+        if (!root) continue
         let d = parentDir(p)
         let guard = 0
         while (d && guard++ < 50) {
@@ -90,7 +111,8 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
         return n
       })
     },
-    [workspace, loadDir]
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [rootsKey, loadDir]
   )
 
   // Issue #11: follow the active file — when a file is opened/switched (via the
@@ -110,7 +132,7 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
   // dots. Each path is revealed only once (`revealedRef`), so this never fights a
   // folder the user later collapses manually; it only expands newly-seen tabs.
   useEffect(() => {
-    if (!workspace || !openTabPathsRaw?.length) return
+    if (!roots.length || !openTabPathsRaw?.length) return
     const fresh = openTabPathsRaw.filter((p) => p && !revealedRef.current.has(p))
     if (!fresh.length) return
     fresh.forEach((p) => revealedRef.current.add(p))
@@ -133,7 +155,8 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
     return () => {
       superseded = true
     }
-  }, [openTabPathsRaw, workspace, revealAncestors])
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openTabPathsRaw, rootsKey, revealAncestors])
 
   // Scroll the active file's row into view once it (and its ancestors) are
   // rendered. Guarded by lastScrolledRef so we only reveal on open, not on every
@@ -173,25 +196,23 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
     if (childrenMap[p] !== undefined) await loadDir(p)
   }
 
-  // Start inline creation for a file
-  const startNewFile = (dirNode) => {
-    const dir = dirNode ? dirNode.path : workspace.rootPath
-    setCreating({ dir, type: 'file', value: 'untitled.md' })
-    // Make sure the directory is expanded
-    if (dirNode) {
-      setExpanded((s) => new Set(s).add(dir))
-      if (!childrenMap[dir]) loadDir(dir)
-    }
+  // Start inline creation for a file. `dir` is an explicit folder path (a root
+  // header or a folder's context menu); falls back to the first root.
+  const startNewFile = (dir) => {
+    const target = dir || roots[0]?.rootPath
+    if (!target) return
+    setCreating({ dir: target, type: 'file', value: 'untitled.md' })
+    setExpanded((s) => new Set(s).add(target))
+    if (!childrenMap[target]) loadDir(target)
   }
 
   // Start inline creation for a folder
-  const startNewFolder = (dirNode) => {
-    const dir = dirNode ? dirNode.path : workspace.rootPath
-    setCreating({ dir, type: 'folder', value: t('prompt.newFolderDefault') })
-    if (dirNode) {
-      setExpanded((s) => new Set(s).add(dir))
-      if (!childrenMap[dir]) loadDir(dir)
-    }
+  const startNewFolder = (dir) => {
+    const target = dir || roots[0]?.rootPath
+    if (!target) return
+    setCreating({ dir: target, type: 'folder', value: t('prompt.newFolderDefault') })
+    setExpanded((s) => new Set(s).add(target))
+    if (!childrenMap[target]) loadDir(target)
   }
 
   // Commit the inline creation
@@ -258,8 +279,8 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
   // visited-guarded so a symlink cycle or a pathologically deep tree can't spin
   // into unbounded IPC recursion.
   const expandAll = async () => {
-    if (!workspace) return
-    const dirs = new Set([workspace.rootPath])
+    if (!roots.length) return
+    const dirs = new Set(roots.map((w) => w.rootPath))
     const seen = new Set()
     const walk = async (dir, depth) => {
       if (depth > 30 || seen.has(dir)) return
@@ -273,7 +294,7 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
         }
       }
     }
-    await walk(workspace.rootPath, 0)
+    for (const w of roots) await walk(w.rootPath, 0)
     setExpanded(dirs)
   }
 
@@ -317,6 +338,65 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
     }
   })
 
+  // 'before' if the pointer is in the top half of a root header, else 'after'.
+  const dropPos = (e) => {
+    const r = e.currentTarget.getBoundingClientRect()
+    return e.clientY - r.top < r.height / 2 ? 'before' : 'after'
+  }
+
+  // DnD wired onto a root header row. Branches on which drag is in flight: a root
+  // header (reorder) or a file/folder (move into this root, like dropProps).
+  const rootDnd = (rootPath) => ({
+    draggable: true,
+    onDragStart: (e) => {
+      dragRootRef.current = rootPath
+      dragPathRef.current = null // make sure this isn't read as a file move
+      e.dataTransfer.effectAllowed = 'move'
+      e.dataTransfer.setData('text/plain', rootPath)
+      e.stopPropagation()
+    },
+    onDragEnd: () => {
+      dragRootRef.current = null
+      setRootDrop(null)
+      setDragOver(null)
+    },
+    onDragOver: (e) => {
+      if (dragRootRef.current) {
+        if (dragRootRef.current === rootPath) return
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        const pos = dropPos(e)
+        setRootDrop((cur) => (cur?.path === rootPath && cur?.pos === pos ? cur : { path: rootPath, pos }))
+      } else if (dragPathRef.current) {
+        e.preventDefault()
+        e.stopPropagation()
+        e.dataTransfer.dropEffect = 'move'
+        if (dragOver !== rootPath) setDragOver(rootPath)
+      }
+    },
+    onDragLeave: () => {
+      setRootDrop((cur) => (cur?.path === rootPath ? null : cur))
+      setDragOver((d) => (d === rootPath ? null : d))
+    },
+    onDrop: (e) => {
+      e.preventDefault()
+      e.stopPropagation()
+      if (dragRootRef.current) {
+        const from = dragRootRef.current
+        const pos = dropPos(e)
+        dragRootRef.current = null
+        setRootDrop(null)
+        if (from !== rootPath) onReorderFolder?.(from, rootPath, pos)
+      } else if (dragPathRef.current) {
+        const src = dragPathRef.current
+        dragPathRef.current = null
+        setDragOver(null)
+        moveInto(src, rootPath)
+      }
+    }
+  })
+
   const commitRename = async () => {
     if (!rename || committingRef.current) return
     const { path, value } = rename
@@ -338,19 +418,17 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
     }
   }
 
-  if (!workspace) {
+  if (!roots.length) {
     return (
       <div className="sidebar-empty">
         <Icon name="folder" size={26} />
         <p>{t('side.noFolder')}</p>
-        <button className="btn-primary" onClick={() => window.dispatchEvent(new Event('mm:openFolder'))}>
+        <button className="btn-primary" onClick={() => (onAddFolder ? onAddFolder() : window.dispatchEvent(new Event('mm:openFolder')))}>
           {t('side.openFolder')}
         </button>
       </div>
     )
   }
-
-  const rootNodes = childrenMap[workspace.rootPath] || []
 
   // Inline confirm (✓) / cancel (✗) buttons shown while creating or renaming.
   // onMouseDown preventDefault keeps the input focused so clicking a button
@@ -490,46 +568,79 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
     )
   }
 
+  // A workspace root: its own collapsible tree, with hover actions on the header
+  // row (new file/folder in this root, and remove-from-sidebar). Children render at
+  // depth 1 so they indent under the root header.
+  const renderRoot = (ws) => {
+    const rootPath = ws.rootPath
+    const isOpen = expanded.has(rootPath)
+    const rootNodes = childrenMap[rootPath] || []
+    const isDropTarget = dragOver === rootPath
+    const dropLine = rootDrop?.path === rootPath ? ` root-drop-${rootDrop.pos}` : ''
+    return (
+      <div key={rootPath} className="tree-root">
+        <div
+          className={`tree-row tree-root-row${isDropTarget ? ' drag-over' : ''}${dropLine}`}
+          style={{ paddingLeft: 8 }}
+          {...rootDnd(rootPath)}
+          onClick={() => toggle({ path: rootPath })}
+          onContextMenu={(e) => {
+            e.preventDefault()
+            e.stopPropagation()
+            setMenu({ x: e.clientX, y: e.clientY, node: { type: 'dir', path: rootPath, name: ws.rootName, isRoot: true } })
+          }}
+          title={rootPath}
+        >
+          <Icon name="chevron-right" size={14} className={`tree-chevron${isOpen ? ' chevron-expanded' : ''}`} />
+          <Icon name={isOpen ? 'folder-open' : 'folder'} size={15} className="tree-icon" />
+          <span className="tree-label tree-root-label">{ws.rootName}</span>
+          <span className="tree-root-actions" onClick={(e) => e.stopPropagation()}>
+            <button title={t('side.newFile')} onClick={() => startNewFile(rootPath)}>
+              <Icon name="file-plus" size={14} />
+            </button>
+            <button title={t('side.newFolder')} onClick={() => startNewFolder(rootPath)}>
+              <Icon name="folder-plus" size={14} />
+            </button>
+            <button title={t('side.removeFolder')} onClick={() => onRemoveFolder?.(rootPath)}>
+              <Icon name="close" size={13} />
+            </button>
+          </span>
+        </div>
+        {isOpen && (
+          <>
+            {creating && creating.dir === rootPath && renderCreatingInput(1)}
+            {rootNodes.length === 0 && !(creating && creating.dir === rootPath) ? (
+              <div className="tree-empty tree-empty-nested" style={{ paddingLeft: 8 + 14 }}>{t('side.empty')}</div>
+            ) : (
+              rootNodes.map((n) => renderNode(n, 1))
+            )}
+          </>
+        )}
+      </div>
+    )
+  }
+
+  // Collapsed when nothing beyond the roots themselves is expanded.
+  const collapsed = expanded.size <= roots.length
+
   return (
     <div className="sidebar">
       <div className="sidebar-head">
-        <span className="sidebar-title" title={workspace.rootPath}>
-          {workspace.rootName}
-        </span>
+        <span className="sidebar-title">{t('cmd.files')}</span>
         <div className="sidebar-head-actions">
-          <button title={t('side.newFile')} onClick={() => startNewFile(null)}>
-            <Icon name="file-plus" size={15} />
+          <button title={t('side.addFolder')} onClick={() => onAddFolder?.()}>
+            <Icon name="plus" size={15} />
           </button>
-          <button title={t('side.newFolder')} onClick={() => startNewFolder(null)}>
-            <Icon name="folder-plus" size={15} />
+          <button
+            title={collapsed ? t('side.expandAll') : t('side.collapseAll')}
+            onClick={collapsed ? expandAll : () => setExpanded(new Set(roots.map((w) => w.rootPath)))}
+          >
+            <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
           </button>
-          {(() => {
-            // Toggle: when everything's collapsed (only root open), expand all;
-            // otherwise collapse back to just the root. Icon reflects the action.
-            const collapsed = expanded.size <= 1
-            return (
-              <button
-                title={collapsed ? t('side.expandAll') : t('side.collapseAll')}
-                onClick={collapsed ? expandAll : () => setExpanded(new Set([workspace.rootPath]))}
-              >
-                <Icon name={collapsed ? 'expand' : 'collapse'} size={15} />
-              </button>
-            )
-          })()}
         </div>
       </div>
-      <div
-        className={`tree${dragOver === workspace.rootPath ? ' drag-over-root' : ''}`}
-        {...dropProps(workspace.rootPath)}
-        onContextMenu={(e) => { e.preventDefault(); setMenu({ x: e.clientX, y: e.clientY, node: null }) }}
-      >
-        {/* Inline creation at root level */}
-        {creating && creating.dir === workspace.rootPath && renderCreatingInput(0)}
-        {rootNodes.length === 0 && !creating ? (
-          <div className="tree-empty">{t('side.empty')}</div>
-        ) : (
-          rootNodes.map((n) => renderNode(n, 0))
-        )}
+      <div className="tree">
+        {roots.map((ws) => renderRoot(ws))}
       </div>
 
       {menu && (
@@ -537,8 +648,8 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
           left: Math.min(menu.x, window.innerWidth - 210),
           top: Math.min(menu.y, window.innerHeight - 340)
         }} onClick={(e) => e.stopPropagation()}>
-          <button onClick={() => { startNewFile(menu.node?.type === 'dir' ? menu.node : null); setMenu(null) }}>{t('side.ctxNewFile')}</button>
-          <button onClick={() => { startNewFolder(menu.node?.type === 'dir' ? menu.node : null); setMenu(null) }}>{t('side.ctxNewFolder')}</button>
+          <button onClick={() => { startNewFile(menu.node ? (menu.node.type === 'dir' ? menu.node.path : parentDir(menu.node.path)) : null); setMenu(null) }}>{t('side.ctxNewFile')}</button>
+          <button onClick={() => { startNewFolder(menu.node ? (menu.node.type === 'dir' ? menu.node.path : parentDir(menu.node.path)) : null); setMenu(null) }}>{t('side.ctxNewFolder')}</button>
           {menu.node?.type === 'file' && onOpenRight && (
             <>
               <div className="menu-sep" />
@@ -549,14 +660,21 @@ export default function Sidebar({ workspace, activePath, openTabPaths, openTabPa
           {menu.node && <button onClick={() => { copyText(menu.node.path); setMenu(null) }}>{t('tab.copyPath')}</button>}
           {menu.node && <button onClick={() => { copyText(menu.node.name); setMenu(null) }}>{t('tab.copyName')}</button>}
           {menu.node && window.api.capabilities?.revealInFolder !== false && <button onClick={() => { window.api.showInFolder(menu.node.path); setMenu(null) }}>{t('side.reveal')}</button>}
-          {menu.node && <div className="menu-sep" />}
-          {menu.node && <button onClick={() => { setRename({ path: menu.node.path, value: menu.node.name }); setMenu(null) }}>{t('side.rename')}</button>}
+          {/* Root folders: remove from the sidebar (does not touch disk). */}
+          {menu.node?.isRoot && (
+            <>
+              <div className="menu-sep" />
+              <button onClick={() => { onRemoveFolder?.(menu.node.path); setMenu(null) }}>{t('side.removeFolder')}</button>
+            </>
+          )}
+          {menu.node && !menu.node.isRoot && <div className="menu-sep" />}
+          {menu.node && !menu.node.isRoot && <button onClick={() => { setRename({ path: menu.node.path, value: menu.node.name }); setMenu(null) }}>{t('side.rename')}</button>}
           {menu.node?.type === 'file' && <button onClick={() => { doDuplicate(menu.node); setMenu(null) }}>{t('side.duplicate')}</button>}
           {menu.node?.type === 'file' && isMarkdownName(menu.node.name) && window.api.capabilities?.pdfExport !== false && (
             <button onClick={() => { onExportPdf?.(menu.node.path); setMenu(null) }}>{t('side.exportPdf')}</button>
           )}
-          {menu.node && <div className="menu-sep" />}
-          {menu.node && <button className="danger" onClick={() => { doDelete(menu.node); setMenu(null) }}>{t('side.delete')}</button>}
+          {menu.node && !menu.node.isRoot && <div className="menu-sep" />}
+          {menu.node && !menu.node.isRoot && <button className="danger" onClick={() => { doDelete(menu.node); setMenu(null) }}>{t('side.delete')}</button>}
         </div>
       )}
     </div>

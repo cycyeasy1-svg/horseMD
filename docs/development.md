@@ -87,6 +87,6 @@ node scripts/etv.mjs
 
 ## 数据/状态约定
 
-- 会话存于 `localStorage`，键 `minimd.session.v1`：`{workspace, theme, lang, recents, sidebarOpen, sidebarMode, openPaths, activePath}`
-- 首次引导标记：`localStorage['horsemd.onboarded.v1']`
+- 会话存于 `localStorage`，键 `easymarkdown.session.v1`：`{workspace, theme, lang, recents, sidebarOpen, sidebarMode, openPaths, activePath}`
+- 首次引导标记：`localStorage['easymarkdown.onboarded.v1']`
 - 主题以 `body` 的 class 表达：`light|dark` 基类 + 可选 `theme-*` 覆盖类

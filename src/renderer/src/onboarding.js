@@ -18,7 +18,7 @@ const EN = `# EasyMarkdown — User Guide 📝
 \`.md\` / \`.markdown\` / \`.mdx\` open in **keep mode by default**. \`.txt\` and very large files open in a plain-text editor.
 
 - **Keep mode (default)** — the original file text *is* the source of truth. Rendering is read-only; you edit in place, one spot at a time, and saving never re-formats the rest. Built for Markdown specs tracked in Git, where stray diffs are not acceptable.
-- **Milkdown mode** — free-form WYSIWYG typing (slash menu, formatting toolbar, LaTeX, Mermaid, image preview). Switch with the **Keep / Milkdown** button at the bottom-right, or the command palette (\`Ctrl+P\` → *Toggle Editor Mode*). Switching back from Milkdown to keep mode warns you if there are unsaved changes, because Milkdown may have re-flowed the text.
+- **Milkdown mode** — the most free-form WYSIWYG typing (slash menu, formatting toolbar, LaTeX, Mermaid, image preview), great for drafting from scratch. **Trade-off: on save it re-serializes the whole document, so it may change the original formatting** — whitespace, list markers \`-\`/\`*\`, blank lines, table alignment — and cannot guarantee a zero diff. That is exactly why \`.md\` defaults to keep mode. Switch with the **Keep / Milkdown** button at the bottom-right, or the command palette (\`Ctrl+P\` → *Toggle Editor Mode*). Switching back to keep mode warns you about unsaved changes, since the re-flowed text would be carried over.
 
 ## Keep mode: editing (the important part)
 
@@ -68,7 +68,7 @@ const ZH = `# EasyMarkdown 使用说明 📝
 \`.md\` / \`.markdown\` / \`.mdx\` **默认用保持模式**打开；\`.txt\` 和超大文件用纯文本编辑器打开。
 
 - **保持模式（默认）** —— 文件原文**就是正本**。渲染只用于显示，编辑是逐处进行的，保存绝不会重排其余内容。专为用 Git 管理的 Markdown 规范文档设计，不容忍多余差分。
-- **Milkdown 模式** —— 自由的所见即所得输入（斜杠菜单、格式工具条、LaTeX、Mermaid、图片预览）。用右下角的 **保持 / Milkdown** 按钮切换，或命令面板（\`Ctrl+P\` → *切换编辑器模式*）。从 Milkdown 切回保持模式时，若有未保存内容会先提示——因为 Milkdown 可能已经重排过文本。
+- **Milkdown 模式** —— 自由度最高的所见即所得输入（斜杠菜单、格式工具条、LaTeX、Mermaid、图片预览），适合从零起草、随手排版。**代价：保存时会把整篇文档重新序列化，可能改动原有格式**——空白、列表符号 \`-\`/\`*\`、空行、表格对齐等，无法保证零差分。这正是 \`.md\` 默认用保持模式的原因。用右下角的 **保持 / Milkdown** 按钮切换，或命令面板（\`Ctrl+P\` → *切换编辑器模式*）。从 Milkdown 切回保持模式时，若有未保存内容会先提示，因为重排后的文本会被带回。
 
 ## 保持模式：编辑功能（重点）
 
@@ -118,7 +118,7 @@ const JA = `# EasyMarkdown 使い方ガイド 📝
 \`.md\` / \`.markdown\` / \`.mdx\` は**既定でキープモード**で開きます。\`.txt\` や非常に大きなファイルはプレーンテキストエディタで開きます。
 
 - **キープモード（既定）** —— ファイルの原文が**正本そのもの**です。描画は表示専用で、編集は箇所ごとに行い、保存で残りが再整形されることはありません。Git で管理する Markdown 仕様書のように、余計な差分が許されない用途のために作られています。
-- **Milkdown モード** —— 自由な WYSIWYG 入力（スラッシュメニュー、書式ツールバー、LaTeX、Mermaid、画像プレビュー）。右下の **キープ / Milkdown** ボタン、またはコマンドパレット（\`Ctrl+P\` → *エディタモードを切り替え*）で切り替えます。Milkdown からキープモードへ戻す際、未保存の変更があると警告します —— Milkdown がテキストを再整形している可能性があるためです。
+- **Milkdown モード** —— 自由度が最も高い WYSIWYG 入力（スラッシュメニュー、書式ツールバー、LaTeX、Mermaid、画像プレビュー）。ゼロから書き起こすのに向きます。**代償：保存時に文書全体を再シリアライズするため、元の書式が変わることがあります**——空白、リスト記号 \`-\`/\`*\`、空行、表の桁揃えなど。差分ゼロは保証されません。これが \`.md\` を既定でキープモードにしている理由です。右下の **キープ / Milkdown** ボタン、またはコマンドパレット（\`Ctrl+P\` → *エディタモードを切り替え*）で切り替えます。キープモードへ戻す際は、再整形後のテキストが引き継がれるため、未保存の変更があると警告します。
 
 ## キープモード：編集機能（重要）
 

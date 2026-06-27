@@ -34,12 +34,14 @@ import { fireToast, HM_TOAST_EVENT } from './ui.js'
 import logoUrl from './assets/logo.png'
 import { clearFindHighlights, findRangesInEl, paintFindHighlights, scrollRangeIntoView, matchIndices, blockIndexForLine } from './find.js'
 import {
-  isNewerVersion, isAbsolutePath, sanitizeWorkspace, baseName, dirName, joinPath,
+  isNewerVersion, isAbsolutePath, sanitizeWorkspaces, baseName, dirName, joinPath,
   isPlainTextDoc, isHeavyDoc, genId, LS, loadSession
 } from './paths.js'
 
-const ONBOARDED_KEY = 'horsemd.onboarded.v1'
-const UPDATE_DISMISS_KEY = 'horsemd.update.dismissed'
+const ONBOARDED_KEY = 'easymarkdown.onboarded.v1'
+// One-time coach-mark explaining Keep vs Milkdown, shown on first run only.
+const MODEHINT_KEY = 'easymarkdown.modehint.v1'
+const UPDATE_DISMISS_KEY = 'easymarkdown.update.dismissed'
 
 export default function App() {
   const session = useRef(loadSession()).current
@@ -48,7 +50,12 @@ export default function App() {
   const isMobile = window.api.platform === 'ios' || window.api.platform === 'android'
   const [tabs, setTabs] = useState([])
   const [activeId, setActiveId] = useState(null)
-  const [workspace, setWorkspace] = useState(sanitizeWorkspace(session.workspace))
+  // Multi-root workspace: an array of { rootPath, rootName }, each rendered as its
+  // own collapsible tree in the sidebar. Upgrading users with the old single
+  // `session.workspace` get it migrated to the first root.
+  const [workspaces, setWorkspaces] = useState(() =>
+    sanitizeWorkspaces(session.workspaces, session.workspace)
+  )
   // On phones the sidebar overlays the editor, so it starts closed to keep the
   // writing surface front-and-center (desktop keeps its previous default).
   const [sidebarOpen, setSidebarOpen] = useState(session.sidebarOpen ?? !isMobile)
@@ -150,6 +157,18 @@ export default function App() {
   // docs default to the source-backed "keep" editor (zero-diff saves); this Set
   // opts a tab into full WYSIWYG instead. Mirrors `richForced` (heavy-doc opt-in).
   const [milkdownForced, setMilkdownForced] = useState(() => new Set())
+  // First-run only: a one-time bubble over the status-bar mode button explaining
+  // Keep vs Milkdown. Set when the welcome doc opens; dismissed (and remembered)
+  // on "Got it" or the first mode switch. Existing users never trigger it.
+  const [showModeHint, setShowModeHint] = useState(false)
+  const dismissModeHint = useCallback(() => {
+    setShowModeHint(false)
+    try {
+      localStorage.setItem(MODEHINT_KEY, '1')
+    } catch {
+      /* ignore */
+    }
+  }, [])
 
   const activeTab = useMemo(() => tabs.find((t) => t.id === activeId) || null, [tabs, activeId])
   const activePath = activeTab?.path || null
@@ -803,31 +822,109 @@ export default function App() {
   )
 
   // --------------------------- workspace ---------------------------
-  const openFolder = useCallback(async () => {
-    const dir = await window.api.openFolder()
-    if (!dir) return
-    const rootName = baseName(dir)
-    setWorkspace({ rootPath: dir, rootName })
+  // Add a folder as a new root (deduped by path). Multiple roots coexist in the
+  // sidebar, each its own tree — opening another project never closes the others.
+  const addWorkspace = useCallback((dir) => {
+    if (!dir || !isAbsolutePath(dir)) return
+    setWorkspaces((ws) =>
+      ws.some((w) => w.rootPath === dir) ? ws : [...ws, { rootPath: dir, rootName: baseName(dir) }]
+    )
+    setSidebarMode('files')
     setSidebarOpen(true)
   }, [])
 
-  useEffect(() => {
-    if (!workspace) {
+  const removeWorkspace = useCallback((rootPath) => {
+    setWorkspaces((ws) => ws.filter((w) => w.rootPath !== rootPath))
+  }, [])
+
+  // Reorder roots by dragging their headers: move `fromPath` to just before/after
+  // `toPath`. Index is recomputed after the removal so the math stays correct.
+  const reorderWorkspaces = useCallback((fromPath, toPath, pos) => {
+    if (!fromPath || !toPath || fromPath === toPath) return
+    setWorkspaces((ws) => {
+      const from = ws.findIndex((w) => w.rootPath === fromPath)
+      if (from < 0 || !ws.some((w) => w.rootPath === toPath)) return ws
+      const next = ws.slice()
+      const [moved] = next.splice(from, 1)
+      let insert = next.findIndex((w) => w.rootPath === toPath)
+      if (pos === 'after') insert += 1
+      next.splice(insert, 0, moved)
+      return next
+    })
+  }, [])
+
+  const openFolder = useCallback(async () => {
+    const dir = await window.api.openFolder()
+    if (!dir) return
+    addWorkspace(dir)
+  }, [addWorkspace])
+
+  // A stable key for the set of roots, so the watch/list effects only re-run when
+  // the roots actually change (not on every array-identity churn).
+  const rootsKey = workspaces.map((w) => w.rootPath).join('\n')
+
+  // The cross-root file index (for the command palette's quick-open) is built
+  // LAZILY — recursively scanning two whole trees at launch stalled startup. We
+  // build it the first time the palette opens, then keep it fresh on changes.
+  const filesBuiltRef = useRef(false)
+  const relistTimerRef = useRef(null)
+  const relistFiles = useCallback(() => {
+    const roots = workspaces.map((w) => w.rootPath)
+    filesBuiltRef.current = true
+    if (!roots.length) {
       setFiles([])
       return
     }
-    window.api.watchStart(workspace.rootPath)
-    window.api.listFiles(workspace.rootPath).then(setFiles)
-    return () => window.api.watchStop(workspace.rootPath)
-  }, [workspace])
+    Promise.all(roots.map((r) => window.api.listFiles(r).catch(() => [])))
+      .then((arrs) => setFiles(arrs.flat()))
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootsKey])
+
+  // Build the index on first palette open; rebuild on root-set change if already
+  // built (so a newly added folder shows up in quick-open).
+  useEffect(() => {
+    if (paletteOpen && !filesBuiltRef.current) relistFiles()
+  }, [paletteOpen, relistFiles])
+  useEffect(() => {
+    if (filesBuiltRef.current) relistFiles()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootsKey])
+
+  // Watch every root. chokidar's initial recursive crawl is heavy, so we DEFER it
+  // past first paint and stagger the roots — starting all watchers at once on
+  // launch saturated the main process and made the UI stutter for a while.
+  useEffect(() => {
+    const roots = workspaces.map((w) => w.rootPath)
+    let cancelled = false
+    const started = []
+    const schedule = (fn) =>
+      window.requestIdleCallback ? window.requestIdleCallback(fn, { timeout: 600 }) : setTimeout(fn, 80)
+    const startNext = (i) => {
+      if (cancelled || i >= roots.length) return
+      window.api.watchStart(roots[i])
+      started.push(roots[i])
+      schedule(() => startNext(i + 1))
+    }
+    schedule(() => startNext(0))
+    return () => {
+      cancelled = true
+      started.forEach((r) => window.api.watchStop(r))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [rootsKey])
 
   useEffect(() => {
     const off = window.api.onWatchChanged(() => {
-      setRefreshNonce((n) => n + 1)
-      if (workspace) window.api.listFiles(workspace.rootPath).then(setFiles)
+      setRefreshNonce((n) => n + 1) // cheap: Sidebar only reloads already-open dirs
+      // Refresh the quick-open index only if it's been built, and debounce so a
+      // burst of fs events triggers one rescan, not one per event.
+      if (filesBuiltRef.current) {
+        clearTimeout(relistTimerRef.current)
+        relistTimerRef.current = setTimeout(relistFiles, 400)
+      }
     })
     return off
-  }, [workspace])
+  }, [relistFiles])
 
   // --------- auto-reload open files edited by external programs ----------
   const watchedRef = useRef(new Set())
@@ -1036,10 +1133,8 @@ export default function App() {
     const offOpen = window.api.onOpenPaths((paths) => openPaths(paths))
     // A folder path arriving from Explorer's "Open with EasyMarkdown" folder menu.
     const offFolder = window.api.onOpenFolderPath?.((dir) => {
-      if (!dir || !isAbsolutePath(dir)) return // never open a relative path as a workspace
-      setWorkspace({ rootPath: dir, rootName: baseName(dir) })
-      setSidebarMode('files')
-      setSidebarOpen(true)
+      // never open a relative path as a workspace; add as a new root (kept alongside any existing ones)
+      addWorkspace(dir)
     })
     const onOpenFolderEvt = () => openFolder()
     window.addEventListener('mm:openFolder', onOpenFolderEvt)
@@ -1062,7 +1157,7 @@ export default function App() {
       offClose?.()
       window.removeEventListener('mm:openFolder', onOpenFolderEvt)
     }
-  }, [openPaths, openFolder])
+  }, [openPaths, openFolder, addWorkspace])
 
   // --- Drop OS files/folders onto the window to open them ---
   // A markdown (or any) file dragged from the Finder/Explorer onto the app
@@ -1096,12 +1191,8 @@ export default function App() {
       const docFiles = files.filter((f) => !(inEditor && f.type.startsWith('image/')))
       if (!dirs.length && !docFiles.length) return
       e.stopPropagation()
-      const dir = dirs[0] && window.api.pathForFile(dirs[0])
-      if (dir && isAbsolutePath(dir)) {
-        setWorkspace({ rootPath: dir, rootName: baseName(dir) })
-        setSidebarMode('files')
-        setSidebarOpen(true)
-      }
+      // Each dropped folder is added as a new root, alongside any already open.
+      dirs.forEach((d) => addWorkspace(window.api.pathForFile(d)))
       const paths = docFiles.map((f) => window.api.pathForFile(f)).filter(Boolean)
       if (paths.length) openPaths(paths)
     }
@@ -1111,7 +1202,7 @@ export default function App() {
       window.removeEventListener('dragover', onDragOver, true)
       window.removeEventListener('drop', onDrop, true)
     }
-  }, [openPaths])
+  }, [openPaths, addWorkspace])
 
   // Ctrl+Tab cycling + restore session tabs on first mount
   useEffect(() => {
@@ -1198,7 +1289,10 @@ export default function App() {
   // --------------------------- persistence -------------------------
   useEffect(() => {
     const data = {
-      workspace,
+      workspaces,
+      // Keep the legacy single field as the first root, so downgrading to an older
+      // build still opens (at least) one of the folders instead of nothing.
+      workspace: workspaces[0] || null,
       theme,
       customTheme,
       lang,
@@ -1224,7 +1318,7 @@ export default function App() {
     // for a brief pause, then write once. The close path flushes the last edit.
     const id = setTimeout(flushSession, 400)
     return () => clearTimeout(id)
-  }, [workspace, theme, customTheme, lang, recents, sidebarOpen, sidebarMode, sidebarWidth, tabs, activePath, flushSession])
+  }, [workspaces, theme, customTheme, lang, recents, sidebarOpen, sidebarMode, sidebarWidth, tabs, activePath, flushSession])
 
   // Flush the pending session snapshot immediately when the window is closing,
   // so the debounce above never drops the user's last few keystrokes.
@@ -1298,6 +1392,8 @@ export default function App() {
     // The welcome doc showcases the editor → render it in Milkdown WYSIWYG.
     setMilkdownForced((prev) => new Set(prev).add(id))
     setActiveId(id)
+    // First run → point at the mode button and explain the two modes, once.
+    if (!localStorage.getItem(MODEHINT_KEY)) setShowModeHint(true)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
@@ -1593,13 +1689,16 @@ export default function App() {
           {sidebarOpen && (
             sidebarMode === 'files' ? (
               <Sidebar
-                workspace={workspace}
+                workspaces={workspaces}
                 activePath={activePath}
                 openTabPaths={openTabPaths}
                 openTabPathsRaw={openTabPathsRaw}
                 onOpenFile={(p) => { openPaths([p]); if (isMobile) setSidebarOpen(false) }}
                 onOpenRight={openFileRight}
                 onExportPdf={exportPathToPdf}
+                onAddFolder={openFolder}
+                onRemoveFolder={removeWorkspace}
+                onReorderFolder={reorderWorkspaces}
                 refreshNonce={refreshNonce}
               />
             ) : (
@@ -1867,7 +1966,12 @@ export default function App() {
           !sourceMode
         }
         keepMode={!!activeTab && !milkdownForced.has(activeTab.id)}
-        onToggleKeep={() => handlers.current.toggleEditorMode()}
+        onToggleKeep={() => {
+          dismissModeHint()
+          handlers.current.toggleEditorMode()
+        }}
+        showModeHint={showModeHint}
+        onDismissModeHint={dismissModeHint}
         activeBlock={activeBlock}
         onPickBlock={(id) => editorApis.current[activeId]?.setBlock(id)}
         pageWidth={settings.pageWidth}
