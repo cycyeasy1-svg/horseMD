@@ -347,18 +347,21 @@ export default function Editor({
 
     // refreshLevel does forced layout reads (coordsAtPos / getBoundingClientRect).
     // Selection change and scroll fire on every keystroke; on a large document
-    // that synchronous reflow is the main typing lag. Coalesce bursts into one
-    // measurement per animation frame.
-    let levelRaf = 0
+    // that synchronous reflow is the main typing lag AND the main cause of the
+    // scroll "chase" (#17) — the main thread is busy reflowing while the
+    // compositor piles up scroll frames.
+    // Throttle: at most once per 200ms (not per frame). On fast scroll the level
+    // badge simply doesn't update until you pause — a fine trade-off vs freezing.
+    let levelTimer = 0
     const scheduleLevel = () => {
-      if (levelRaf) return
-      levelRaf = requestAnimationFrame(() => {
-        levelRaf = 0
+      if (levelTimer) return
+      levelTimer = setTimeout(() => {
+        levelTimer = 0
         refreshLevel()
-      })
+      }, 200)
     }
     cleanups.push(() => {
-      if (levelRaf) cancelAnimationFrame(levelRaf)
+      if (levelTimer) clearTimeout(levelTimer)
     })
 
     // IMPORTANT: register listeners BEFORE create(). Crepe wires them during

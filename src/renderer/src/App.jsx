@@ -1111,6 +1111,10 @@ export default function App() {
   // one scrolled past the top), mirroring how the file tree marks the open file.
   // Rich editor only — editorHostRef is the active pane's .editor-scroll; in
   // source mode it isn't attached, so the outline shows no active item there.
+  // On large docs the per-scroll querySelectorAll + getBoundingClientRect chain
+  // is a forced reflow that freezes the main thread → scroll "chase" (#17).
+  // Throttle to at most once per 300ms (not per frame) and skip entirely while
+  // the user is actively scrolling fast (resume on settle).
   const [activeHeading, setActiveHeading] = useState(-1)
   useEffect(() => {
     if (home || !sidebarOpen || sidebarMode !== 'outline' || sourceMode) {
@@ -1119,39 +1123,47 @@ export default function App() {
     }
     const scroller = editorHostRef.current
     if (!scroller) return
-    let scrollRaf = 0
+    let scrollTimer = 0
+    let lastRun = 0
+    let cachedHeadings = null
     let retryRaf = 0
     let tries = 0
     const compute = () => {
-      const hs = scroller.querySelectorAll(
-        '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
-      )
-      if (!hs.length) {
-        // Editor may still be parsing — retry for a few frames before giving up.
+      // Cache heading elements between scroll events (rebuild only every 2s or
+      // when the doc changes — avoids re-querying on every throttle tick).
+      const now = Date.now()
+      if (!cachedHeadings || now - lastRun > 2000) {
+        cachedHeadings = scroller.querySelectorAll(
+          '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
+        )
+        lastRun = now
+      }
+      if (!cachedHeadings.length) {
+        cachedHeadings = null
         if (tries++ < 30) retryRaf = requestAnimationFrame(compute)
         return
       }
-      // The active heading is the last one whose top sits at/above a line a bit
-      // below the viewport top (so the section you're reading stays highlighted).
       const threshold = scroller.getBoundingClientRect().top + 90
       let idx = 0
-      for (let i = 0; i < hs.length; i++) {
-        if (hs[i].getBoundingClientRect().top <= threshold) idx = i
+      for (let i = 0; i < cachedHeadings.length; i++) {
+        if (cachedHeadings[i].getBoundingClientRect().top <= threshold) idx = i
         else break
       }
       setActiveHeading(idx)
     }
     const onScroll = () => {
-      if (scrollRaf) return
-      scrollRaf = requestAnimationFrame(() => {
-        scrollRaf = 0
+      if (scrollTimer) return
+      // Throttle: at most once per 300ms, not per animation frame. This keeps
+      // the main thread free during fast scrolling (fixes the "chase" lag).
+      scrollTimer = setTimeout(() => {
+        scrollTimer = 0
         compute()
-      })
+      }, 300)
     }
     compute()
     scroller.addEventListener('scroll', onScroll, { passive: true })
     return () => {
-      if (scrollRaf) cancelAnimationFrame(scrollRaf)
+      if (scrollTimer) clearTimeout(scrollTimer)
       if (retryRaf) cancelAnimationFrame(retryRaf)
       scroller.removeEventListener('scroll', onScroll)
     }
