@@ -1091,6 +1091,11 @@ export default function App() {
       }
       const el = hs[index]
       if (!el) return false
+      // Keep mode: the target heading may be folded inside a collapsed section
+      // (display:none → not scrollable). Ask the keep editors to expand its
+      // ancestors first, then scroll.
+      if (el.offsetParent === null)
+        Object.values(editorApis.current).forEach((api) => api?.revealHeading?.(el))
       el.scrollIntoView({ behavior: 'smooth', block: 'start' })
       return true
     }

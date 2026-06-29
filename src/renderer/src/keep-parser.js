@@ -79,10 +79,13 @@ export function inline(text, baseDir) {
       // Pull inline code out first (placeholders) so neither entity decoding nor
       // the bold/italic passes touch a code span's literal contents — `` `&nbsp;` ``
       // must stay literal, like in standard Markdown.
+      // Use a NUL sentinel (\x00…\x00) as the placeholder, never a space-wrapped
+      // number: literal prose like "以下 2 区域" would otherwise be mistaken for a
+      // placeholder on restore and render as <code>undefined</code>.
       const codes = []
       s = s.replace(/`([^`]+)`/g, (m, c) => {
         codes.push(c)
-        return ' ' + (codes.length - 1) + ' '
+        return '\x00' + (codes.length - 1) + '\x00'
       })
       s = decodeEntityRefs(s)
       s = s.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>')
@@ -97,7 +100,7 @@ export function inline(text, baseDir) {
         /\[([^\]]+)\]\(([^)]+)\)/g,
         (m, label, href) => '<a href="' + safeHref(href) + '" target="_blank" rel="noopener">' + label + '</a>'
       )
-      s = s.replace(/ (\d+) /g, (m, i) => '<code>' + codes[+i] + '</code>')
+      s = s.replace(/\x00(\d+)\x00/g, (m, i) => '<code>' + codes[+i] + '</code>')
       return s
     })
   return parts.join('<br>')
@@ -482,12 +485,24 @@ function renderTable(b, tableIdx, filterState, forExport, baseDir) {
 export function renderBlockInner(b, bi, viewLines, opts = {}) {
   const forExport = !!opts.forExport
   const srcEditLabel = opts.srcEditLabel || 'edit'
+  const collapseLabel = opts.collapseLabel || 'Collapse / expand section'
   const filterState = opts.filterState || {}
   const tableIdx = opts.tableIdx || 0
   const baseDir = opts.baseDir
   let inner = ''
   if (b.type === 'heading') {
-    inner = '<h' + b.level + ' id="km-h-' + bi + '">' + inline(b.text, baseDir) + '</h' + b.level + '>'
+    // A chevron toggle in the left gutter folds the heading's section (KeepEditor
+    // wires the click → pure DOM visibility, never touching the source). Omitted
+    // for export so the printed/PDF doc shows every section expanded.
+    const collapseBtn = forExport
+      ? ''
+      : '<button class="km-collapse-toggle" type="button" tabindex="-1" title="' +
+        escapeAttr(collapseLabel) +
+        '" aria-label="' +
+        escapeAttr(collapseLabel) +
+        '"><svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg></button>'
+    inner =
+      '<h' + b.level + ' id="km-h-' + bi + '" class="km-heading">' + collapseBtn + inline(b.text, baseDir) + '</h' + b.level + '>'
   } else if (b.type === 'paragraph') {
     inner = '<p>' + viewLines.slice(b.start, b.end + 1).map((l) => inline(l, baseDir)).join('<br>') + '</p>'
   } else if (b.type === 'code') {
@@ -537,11 +552,13 @@ export function renderBlockInner(b, bi, viewLines, opts = {}) {
 // Render the whole document to HTML, plus return the parsed block map / viewLines
 // so the caller (KeepEditor) can map edits back to source.
 //   opts.srcEditLabel — label for the per-block "edit source" button
+//   opts.collapseLabel — label for the per-heading collapse/expand toggle
 //   opts.forExport    — omit edit affordances (buttons / filter ▼) for PDF
 //   opts.baseDir      — document folder, for resolving relative image paths
 export function renderDoc(rawLines, filterState = {}, opts = {}) {
   const forExport = !!opts.forExport
   const srcEditLabel = opts.srcEditLabel || 'edit'
+  const collapseLabel = opts.collapseLabel
   const baseDir = opts.baseDir
   const viewLines = toViewLines(rawLines)
   const blocks = parseDoc(viewLines)
@@ -551,12 +568,16 @@ export function renderDoc(rawLines, filterState = {}, opts = {}) {
     const innerHtml = renderBlockInner(b, bi, viewLines, {
       forExport,
       srcEditLabel,
+      collapseLabel,
       filterState,
       tableIdx,
       baseDir
     })
     if (b.type === 'table') tableIdx++
-    html += '<div class="km-block" data-bi="' + bi + '">' + innerHtml + '</div>'
+    // Heading blocks carry their level so KeepEditor can compute the section range
+    // (every following block until the next heading of the same or higher level).
+    const hlevel = b.type === 'heading' ? ' data-hlevel="' + b.level + '"' : ''
+    html += '<div class="km-block"' + hlevel + ' data-bi="' + bi + '">' + innerHtml + '</div>'
   })
   return { html: html || '<div class="km-empty"></div>', blocks, viewLines }
 }

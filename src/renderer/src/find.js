@@ -49,6 +49,15 @@ export function paintFindHighlights(ranges, activeIdx) {
 }
 export function scrollRangeIntoView(range, scroller) {
   if (!range || !scroller) return
+  // Reveal the match inside any *nested* scroll containers first — e.g. keep-mode
+  // table boxes (`.km-table-wrap`, overflow:auto, sticky header) clip both axes
+  // with their own scroll position. scrollIntoView walks ALL scrollable ancestors
+  // (the table box AND the outer scroller), which the manual scrollTop math below
+  // cannot, and `inline:'nearest'` recovers columns hidden by horizontal scroll.
+  const node = range.startContainer
+  const el = node.nodeType === 3 ? node.parentElement : node
+  el?.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  // Then center it in the editor scroller for comfortable reading.
   const rect = range.getBoundingClientRect()
   const sr = scroller.getBoundingClientRect()
   if (!rect.height && !rect.width) return

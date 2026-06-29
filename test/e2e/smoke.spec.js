@@ -41,7 +41,9 @@ test('rendered document shows list and table block content', async () => {
   try {
     await page.locator('.tab', { hasText: 'welcome.md' }).click()
     await expect(page.getByText('list item one')).toBeVisible()
-    await expect(page.getByText('col a')).toBeVisible()
+    // Scope to the live document: a wide table also mounts a hidden floating-header
+    // clone (outside .km-doc) carrying the same header text — see editor-tablescroll.js.
+    await expect(page.locator('.km-doc').getByText('col a')).toBeVisible()
   } finally {
     await cleanup()
   }

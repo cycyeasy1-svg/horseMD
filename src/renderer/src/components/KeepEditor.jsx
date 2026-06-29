@@ -12,6 +12,7 @@ import {
 import { inlineRichStyles } from './editor-copy.js'
 import { dirOf } from './editor-images.js'
 import { getMermaidSvg, peekMermaidSvg } from './editor-mermaid.js'
+import { enhanceKeepTables } from './editor-tablescroll.js'
 
 // Wrapper style for rich-text copy (mirrors the Crepe editor's onCopy payload) so
 // pasted output keeps a sensible default font in apps that ignore external CSS.
@@ -66,6 +67,7 @@ export default function KeepEditor({
   const viewLinesRef = useRef([]) // \r-stripped view (parse/display)
   const blocksRef = useRef([]) // source map from the last render
   const filterStateRef = useRef({}) // tableIdx -> { colIdx: Set(excluded values) }
+  const collapsedRef = useRef(new Set()) // collapsed section keys ("level:text"), persisted across re-renders
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
   const onOutlineRef = useRef(onOutline)
@@ -80,6 +82,7 @@ export default function KeepEditor({
   const activePopRef = useRef(null) // the open filter dropdown element
   const activePopBtnRef = useRef(null) // the ▼ button that opened it (for toggle)
   const activeMenuRef = useRef(null) // the open table context menu element
+  const tableScrollRef = useRef(null) // wide-table top-scrollbar + floating-header handle
   // Tear down every body-appended popover (cell pop / filter pop / table menu /
   // confirm modal). Set inside the mount effect; called when the pane leaves view
   // so a floating edit bar never lingers over another tab's document.
@@ -128,6 +131,7 @@ export default function KeepEditor({
       if (destroyed) return
       const { html, blocks, viewLines } = renderDoc(rawLinesRef.current, filterStateRef.current, {
         srcEditLabel: tRef.current('keep.editSource'),
+        collapseLabel: tRef.current('keep.toggleSection'),
         baseDir: dirOf(docPathRef.current)
       })
       // tag blocks with their index so the outline can reference them
@@ -166,8 +170,30 @@ export default function KeepEditor({
     const finishRender = () => {
       if (destroyed) return
       applyMultilineFlags()
+      applyCollapsed() // restore folded sections AFTER measuring (hidden blocks measure 0)
       Object.keys(filterStateRef.current).forEach((ti) => applyFilter(parseInt(ti)))
       reportFilter()
+      // Wide-table affordances: the top synced horizontal scrollbar + the
+      // viewport-fixed floating header live outside the normal block flow (the
+      // float is appended to body), so rebuild them on every full re-render and
+      // tear the old ones down first.
+      tableScrollRef.current?.destroy()
+      tableScrollRef.current = enhanceKeepTables(host, host.closest('.editor-scroll'), {
+        onFilterClick: (clonedBtn) => openFilterPop(clonedBtn),
+        // Editing a floating-header cell: resolve the clone to the REAL <th> (same
+        // data-line/data-ci → same source line) and edit that, but anchor the
+        // editor popup under the clicked clone so it appears where the user clicked.
+        onHeaderEdit: (clonedTh) => {
+          const real = host.querySelector(
+            'th[data-line="' +
+              clonedTh.getAttribute('data-line') +
+              '"][data-ci="' +
+              clonedTh.getAttribute('data-ci') +
+              '"]'
+          )
+          if (real) openCellPop(real, clonedTh)
+        }
+      })
       if (embedObserver) embedObserver.disconnect() // drop stale observations from the old DOM
       observeEmbeds()
     }
@@ -212,6 +238,70 @@ export default function KeepEditor({
         }
       }
       bl.classList.toggle('km-multiline', multi)
+    }
+
+    // ── heading section collapse / expand (display-only; never touches rawLines) ──
+    // A heading block carries `data-hlevel`. Collapsing one hides every following
+    // block until the next heading of the same or higher level. State is kept as a
+    // Set of section keys (so it survives the full re-render an edit triggers) while
+    // the live `km-collapsed` class on heading blocks is the source of truth the DOM
+    // derives visibility from. Nesting works: a block is hidden if ANY ancestor
+    // heading is collapsed (recomputed each time, not cached per block).
+    const sectionKey = (headEl) => {
+      const lvl = headEl.getAttribute('data-hlevel') || ''
+      const h = headEl.querySelector('h1,h2,h3,h4,h5,h6')
+      return lvl + ':' + (h ? (h.textContent || '').trim() : '')
+    }
+    // Re-derive `km-section-hidden` on every block from the `km-collapsed` headings.
+    const refreshVisibility = () => {
+      const stack = [] // levels of currently-open collapsed ancestor headings
+      host.querySelectorAll('.km-block').forEach((el) => {
+        const isHeading = el.hasAttribute('data-hlevel')
+        const lvl = isHeading ? parseInt(el.getAttribute('data-hlevel')) : null
+        if (isHeading) while (stack.length && stack[stack.length - 1] >= lvl) stack.pop()
+        el.classList.toggle('km-section-hidden', stack.length > 0)
+        if (isHeading && el.classList.contains('km-collapsed')) stack.push(lvl)
+      })
+    }
+    const toggleSection = (headEl) => {
+      const collapsed = !headEl.classList.contains('km-collapsed')
+      headEl.classList.toggle('km-collapsed', collapsed)
+      if (collapsed) collapsedRef.current.add(sectionKey(headEl))
+      else collapsedRef.current.delete(sectionKey(headEl))
+      refreshVisibility()
+      tableScrollRef.current?.update() // hidden/shown tables change the layout
+    }
+    // Re-apply the persisted collapse state after a full re-render rebuilt the DOM.
+    const applyCollapsed = () => {
+      host.querySelectorAll('.km-block[data-hlevel]').forEach((el) => {
+        el.classList.toggle('km-collapsed', collapsedRef.current.has(sectionKey(el)))
+      })
+      refreshVisibility()
+    }
+    // Expand every collapsed ancestor section that hides `el` (an <hN>), so an
+    // outline jump to a buried heading can actually scroll to it. The heading's OWN
+    // collapse state is left alone (it hides only its children, not itself).
+    const revealHeading = (el) => {
+      if (!el || !host.contains(el)) return false
+      const block = el.closest('.km-block')
+      if (!block) return false
+      let need = block.hasAttribute('data-hlevel') ? parseInt(block.getAttribute('data-hlevel')) : Infinity
+      let node = block.previousElementSibling
+      while (node && need > 1) {
+        if (node.classList?.contains('km-block') && node.hasAttribute('data-hlevel')) {
+          const lvl = parseInt(node.getAttribute('data-hlevel'))
+          if (lvl < need) {
+            if (node.classList.contains('km-collapsed')) {
+              node.classList.remove('km-collapsed')
+              collapsedRef.current.delete(sectionKey(node))
+            }
+            need = lvl
+          }
+        }
+        node = node.previousElementSibling
+      }
+      refreshVisibility()
+      return true
     }
 
     // ── embeds (mermaid / KaTeX), rendered only when scrolled near view ──
@@ -332,8 +422,11 @@ export default function KeepEditor({
     const repositionCellPop = () => {
       const cur = activeCellPopRef.current
       if (!cur) return
-      const { pop, td } = cur
-      const r = td.getBoundingClientRect()
+      const { pop } = cur
+      // Anchor to the element the user actually clicked (the floating-header clone
+      // when editing from there) so the editor sits under it, even though the edit
+      // targets the real cell (`td`).
+      const r = (cur.anchor || cur.td).getBoundingClientRect()
       const pw = pop.offsetWidth || 360
       const ph = pop.offsetHeight || 160
       const left = Math.max(8, Math.min(r.left, window.innerWidth - pw - 8))
@@ -341,6 +434,22 @@ export default function KeepEditor({
       if (top + ph > window.innerHeight - 8) top = Math.max(8, r.top - ph - 6)
       pop.style.left = left + 'px'
       pop.style.top = top + 'px'
+      const sc = host.closest('.editor-scroll')
+      if (sc) {
+        const sr = sc.getBoundingClientRect()
+        pop.style.visibility = r.bottom < sr.top || r.top > sr.bottom ? 'hidden' : 'visible'
+      }
+    }
+    // Re-anchor the open filter dropdown under its ▼ header button on scroll/resize
+    // (position:fixed → viewport coords), and hide it while the header is scrolled
+    // out of the editor's viewport so it stays pinned to the column header.
+    const repositionFilterPop = () => {
+      const pop = activePopRef.current
+      const btn = activePopBtnRef.current
+      if (!pop || !btn) return
+      const r = btn.getBoundingClientRect()
+      pop.style.left = Math.min(r.left, window.innerWidth - 260) + 'px'
+      pop.style.top = r.bottom + 4 + 'px'
       const sc = host.closest('.editor-scroll')
       if (sc) {
         const sr = sc.getBoundingClientRect()
@@ -373,6 +482,8 @@ export default function KeepEditor({
         if (td.tagName === 'TH') {
           const span = td.querySelector('.km-th-content')
           if (span) span.innerHTML = inline(val)
+          // Mirror the edit onto the floating-header clone so it stays identical.
+          tableScrollRef.current?.refreshContent()
         } else {
           td.innerHTML = inline(val)
         }
@@ -411,6 +522,7 @@ export default function KeepEditor({
       if (blockDiv) {
         blockDiv.innerHTML = renderBlockInner(b, bi, viewLinesRef.current, {
           srcEditLabel: tRef.current('keep.editSource'),
+          collapseLabel: tRef.current('keep.toggleSection'),
           filterState: filterStateRef.current,
           baseDir: dirOf(docPathRef.current)
         })
@@ -524,7 +636,7 @@ export default function KeepEditor({
       })
     }
 
-    const openCellPop = (td) =>
+    const openCellPop = (td, anchor) =>
       openAfterClose(() => {
         if (destroyed) return
         // A commit re-rendered the doc → the original cell is detached; re-resolve.
@@ -562,7 +674,10 @@ export default function KeepEditor({
         pop.appendChild(ta)
         pop.appendChild(act)
         document.body.appendChild(pop)
-        activeCellPopRef.current = { pop, td, raw, lineIdx, colIdx }
+        // `anchor` is the (possibly floating-header) element to position under; it
+        // falls back to the real cell. Re-resolve it too if it got detached.
+        const anchorEl = anchor && anchor.isConnected ? anchor : td
+        activeCellPopRef.current = { pop, td, anchor: anchorEl, raw, lineIdx, colIdx }
         repositionCellPop() // anchor below the cell, flip/clamp to stay on screen
         ta.focus()
         ta.select()
@@ -918,14 +1033,20 @@ export default function KeepEditor({
       })
       pop.querySelector('.cancel').onclick = closePop
       pop.querySelector('.ok').onclick = () => {
+        // Excel-style: the search box narrows the visible list; confirming keeps
+        // only the values that are BOTH visible (match the search) AND checked,
+        // and excludes everything else. So typing a search term and confirming
+        // filters the table down to the matching rows. (Previously the hidden,
+        // non-matching values were silently kept unless already excluded, so a
+        // search-then-confirm with no manual unchecking did nothing.)
+        const keep = new Set(
+          [...list.querySelectorAll('input')]
+            .filter((cb) => cb.checked)
+            .map((cb) => cb.dataset.v)
+        )
         const ex = new Set()
-        // Values hidden by the search box keep their previous excluded state.
-        const shown = new Set([...list.querySelectorAll('input')].map((cb) => cb.dataset.v))
         sorted.forEach((v) => {
-          if (!shown.has(v) && excluded.has(v)) ex.add(v)
-        })
-        list.querySelectorAll('input').forEach((cb) => {
-          if (!cb.checked) ex.add(cb.dataset.v)
+          if (!keep.has(v)) ex.add(v)
         })
         if (ex.size > 0) filterStateRef.current[ti][ci] = ex
         else delete filterStateRef.current[ti][ci]
@@ -937,14 +1058,23 @@ export default function KeepEditor({
         applyFilter(ti)
         reportFilter()
         const cols = filterStateRef.current[ti]
-        btn.classList.toggle('active', !!(cols && cols[ci] && cols[ci].size > 0))
+        const isActive = !!(cols && cols[ci] && cols[ci].size > 0)
+        // Toggle the ▼ active state on every copy of this column's button — the
+        // live header AND the floating-header clone (which may be the one clicked).
+        host
+          .querySelectorAll('.km-filter-btn[data-ti="' + ti + '"][data-ci="' + ci + '"]')
+          .forEach((b) => b.classList.toggle('active', isActive))
+        document
+          .querySelectorAll('.km-float-header .km-filter-btn[data-ti="' + ti + '"][data-ci="' + ci + '"]')
+          .forEach((b) => b.classList.toggle('active', isActive))
+        // Hiding rows can reflow column widths — re-measure the floating header so
+        // it stays aligned with the (now narrower/wider) live table.
+        tableScrollRef.current?.update()
       }
       document.body.appendChild(pop)
-      const r = btn.getBoundingClientRect()
-      pop.style.left = Math.min(r.left, window.innerWidth - 260) + 'px'
-      pop.style.top = r.bottom + 4 + 'px'
       activePopRef.current = pop
       activePopBtnRef.current = btn
+      repositionFilterPop()
     }
     const applyFilter = (ti) => {
       const table = host.querySelector('table[data-ti="' + ti + '"]')
@@ -986,6 +1116,7 @@ export default function KeepEditor({
     let linkTimerRef = null // pending single-click link-open (cancelled by dblclick)
     const onDblClick = (e) => {
       clearTimeout(linkTimerRef) // a double-click is an edit, not a link navigation
+      if (e.target.closest('.km-collapse-toggle')) return // a fold toggle, not an edit
       // Edit any table cell — body (<td>) or header (<th>). The filter ▼ lives in
       // the header; a double-click on it is a filter toggle, not a cell edit.
       const cell = e.target.closest('td, th')
@@ -1003,6 +1134,15 @@ export default function KeepEditor({
       }
     }
     const onClick = (e) => {
+      // Fold/unfold a heading's section. Handled first so it never falls through to
+      // link-open or block-edit; stopPropagation keeps the block hover-edit quiet.
+      const ct = e.target.closest('.km-collapse-toggle')
+      if (ct) {
+        e.stopPropagation()
+        const head = ct.closest('.km-block[data-hlevel]')
+        if (head) toggleSection(head)
+        return
+      }
       // A plain click on a link opens it (keep mode is a read-only preview). The
       // open is deferred briefly and cancelled by a following dblclick, so
       // double-clicking a cell/block that contains a link still enters edit. Skip
@@ -1099,8 +1239,14 @@ export default function KeepEditor({
     const onScroll = () => {
       closeMenu()
       repositionCellPop()
+      repositionFilterPop()
+      tableScrollRef.current?.update()
     }
-    const onResize = () => repositionCellPop()
+    const onResize = () => {
+      repositionCellPop()
+      repositionFilterPop()
+      tableScrollRef.current?.update()
+    }
 
     // Close every body-level popover at once (a cell editor included — its unsaved
     // edits are dropped, which beats it floating over an unrelated document).
@@ -1109,6 +1255,7 @@ export default function KeepEditor({
       closeMenu()
       closeConfirm()
       closeCellPop()
+      tableScrollRef.current?.hide() // a fixed floating header would otherwise linger
     }
 
     host.addEventListener('dblclick', onDblClick)
@@ -1149,7 +1296,10 @@ export default function KeepEditor({
         inject('.km-math')
         return tmp.innerHTML
       },
-      setBlock: () => {} // no block model in keep mode
+      setBlock: () => {}, // no block model in keep mode
+      // Outline jump: if the target heading is buried in a collapsed section, expand
+      // its ancestors first so App's scrollIntoView lands on a visible element.
+      revealHeading: (el) => revealHeading(el)
     })
 
     return () => {
@@ -1161,6 +1311,8 @@ export default function KeepEditor({
       closeMenu()
       closeConfirm()
       closeCellPop()
+      tableScrollRef.current?.destroy() // remove body-appended floating headers
+      tableScrollRef.current = null
       activeBlockEditRef.current = null // drop block-edit tracking (host is torn down)
       onFilterChangeRef.current?.(null) // drop this tab's filter badge on unmount
       host.removeEventListener('dblclick', onDblClick)

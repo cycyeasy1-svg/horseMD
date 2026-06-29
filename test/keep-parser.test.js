@@ -35,6 +35,12 @@ describe('inline', () => {
       '<strong>b</strong> and <em>i</em> and <code>c</code>'
     )
   })
+  it('does not mistake a space-wrapped number in prose for a code placeholder', () => {
+    // Regression: the code-span placeholder was once ` N `, so literal prose like
+    // "以下 2 区域" got restored as <code>undefined</code>.
+    expect(inline('人間は以下 2 区域')).toBe('人間は以下 2 区域')
+    expect(inline('`a` then 0 and `b`')).toBe('<code>a</code> then 0 and <code>b</code>')
+  })
   it('keeps inline code contents literal — escaped, with no entity decode or bold', () => {
     // escapeHtml runs on the whole segment before code spans are pulled out, so a
     // code span's `&` is already `&amp;` and stays that way (never decoded back).

@@ -215,6 +215,7 @@ export const STRINGS = {
 
     // keep mode (source-backed editing) — zero-diff editor
     'keep.editSource': 'Edit content',
+    'keep.toggleSection': 'Collapse / expand section',
     'keep.loading': 'Loading…',
     'keep.filterSearch': 'Search values…',
     'keep.selectAll': 'Select all',
@@ -453,6 +454,7 @@ export const STRINGS = {
 
     // 保持模式(源码保真编辑)—— 零差分编辑器
     'keep.editSource': '内容编辑',
+    'keep.toggleSection': '折叠/展开此节',
     'keep.loading': '加载中…',
     'keep.filterSearch': '搜索值…',
     'keep.selectAll': '全选',
@@ -702,6 +704,7 @@ export const STRINGS = {
 
     // keep mode (source-backed editing) — zero-diff editor
     'keep.editSource': '内容を編集',
+    'keep.toggleSection': 'セクションを折りたたみ／展開',
     'keep.loading': '読み込み中…',
     'keep.filterSearch': '値を検索…',
     'keep.selectAll': 'すべて選択',
