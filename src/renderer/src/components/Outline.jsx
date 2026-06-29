@@ -2,12 +2,25 @@ import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { useI18n } from '../i18n.jsx'
 import { Icon } from './icons.jsx'
 
+// Pull every heading the document renders — not just ATX `#` headings, but also
+// Setext (text underlined with === / ---) and inline HTML <h1>…<h6> — so the
+// outline matches what's actually shown. Fenced code is skipped, and a leading
+// `---` YAML front-matter block is stepped over so its closing fence isn't
+// mistaken for a Setext underline.
 export function parseHeadings(md) {
   const lines = (md || '').split('\n')
   const out = []
   let inFence = false
   let fence = ''
-  lines.forEach((line) => {
+  let i = 0
+  // Skip a YAML front-matter block at the very top (--- … ---).
+  if (lines[0] !== undefined && /^---\s*$/.test(lines[0])) {
+    let j = 1
+    while (j < lines.length && !/^---\s*$/.test(lines[j])) j++
+    if (j < lines.length) i = j + 1 // found the closing fence
+  }
+  for (; i < lines.length; i++) {
+    const line = lines[i]
     const fm = line.match(/^(\s*)(```+|~~~+)/)
     if (fm) {
       const marker = fm[2][0]
@@ -17,12 +30,35 @@ export function parseHeadings(md) {
       } else if (marker === fence) {
         inFence = false
       }
-      return
+      continue
     }
-    if (inFence) return
+    if (inFence) continue
+    // ATX: # … ######
     const hm = line.match(/^(#{1,6})\s+(.+?)\s*#*\s*$/)
-    if (hm) out.push({ level: hm[1].length, text: hm[2].trim() })
-  })
+    if (hm) {
+      out.push({ level: hm[1].length, text: hm[2].trim() })
+      continue
+    }
+    // Inline HTML heading: <h2 …>text</h2> (single line).
+    const htm = line.match(/<h([1-6])\b[^>]*>(.*?)<\/h\1>/i)
+    if (htm) {
+      out.push({ level: Number(htm[1]), text: htm[2].replace(/<[^>]+>/g, '').trim() })
+      continue
+    }
+    // Setext: a paragraph line underlined by === (h1) or --- (h2). The text line
+    // must carry real content and not itself be a heading / list / quote / table.
+    const next = lines[i + 1]
+    if (
+      next !== undefined &&
+      /^(=+|-+)\s*$/.test(next) &&
+      /\S/.test(line) &&
+      !/^(#{1,6}\s|[-*+]\s|\d+\.\s|>\s|\||\s*$)/.test(line)
+    ) {
+      out.push({ level: next.trim()[0] === '=' ? 1 : 2, text: line.trim() })
+      i++ // consume the underline
+      continue
+    }
+  }
   return out
 }
 
