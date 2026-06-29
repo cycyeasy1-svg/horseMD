@@ -4,6 +4,7 @@ import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import {
   editorViewCtx,
   nodeViewCtx,
+  parserCtx,
   prosePluginsCtx,
   remarkPluginsCtx,
   remarkStringifyOptionsCtx
@@ -23,6 +24,7 @@ import { dirOf, isRelativePath, resolveToFileUrl } from './editor-images.js'
 import { inlineRichStyles } from './editor-copy.js'
 import { createMermaidPlugin } from './editor-mermaid.js'
 import { tableBreakKeymap, tableCellBreakHandler, brToBreakRemarkPlugin } from './editor-tablebreak.js'
+import { attachMdPasteHandler } from './editor-md-paste.js'
 
 // Every mounted rich editor registers itself here. A rich-text tab stays mounted
 // after its first activation, so several editors (and several Crepe selection
@@ -628,6 +630,20 @@ export default function Editor({
         cleanups.push(() => view.dom.removeEventListener('copy', onCopy, true))
         cleanups.push(() => view.dom.removeEventListener('paste', onPasteImage, true))
         cleanups.push(() => view.dom.removeEventListener('drop', onDropImage, true))
+        // Markdown paste (capture phase — runs before ProseMirror's handler so
+        // text/html doesn't bypass us). Parses pasted Markdown source via
+        // Milkdown's own remark pipeline. See editor-md-paste.js.
+        cleanups.push(
+          attachMdPasteHandler(view, (md) => {
+            try {
+              // parserCtx is a FUNCTION (text) => Doc (ParserState.create returns
+              // a closure). Call it directly — it runs the full remark pipeline.
+              return crepe.editor.ctx.get(parserCtx)(md)
+            } catch {
+              return null
+            }
+          })
+        )
 
         // --- Resolve relative image paths against the file's folder ---
         const baseDir = dirOf(docPath)
