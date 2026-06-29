@@ -3642,6 +3642,19 @@ body.hm-full-width .km-doc {
 .km-doc > .km-block:first-child > :nth-child(2) {
   margin-top: 0;
 }
+/* Block spacing: the status-bar "paragraph spacing" slider controls the uniform
+   vertical gap between top-level blocks (headings, paragraphs, lists, quotes,
+   code, …) — keep mode wraps every block in a .km-block, so this reads naturally
+   as block spacing. The gap lives on the block boundary; each block's own
+   top-level element vertical margins are zeroed so they don't stack with it.
+   (.km-doc prefix gives this enough specificity to win over .km-doc p etc.) */
+.km-doc .km-block + .km-block {
+  margin-top: var(--editor-para-spacing, 0.8em);
+}
+.km-doc .km-block > * {
+  margin-top: 0;
+  margin-bottom: 0;
+}
 /* Edit-source entry point: a pencil pill at the block's top-right, revealed on
    hover. Anchored to the right so its label is never clipped by the scroll
    container (the old left-gutter placement cut off wider labels like the
@@ -3799,7 +3812,7 @@ body.hm-full-width .km-doc {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.km-doc p { margin: var(--editor-para-spacing, 0.8em) 0; line-height: inherit; }
+.km-doc p { margin: 0.8em 0; line-height: inherit; }
 .km-doc ul,
 .km-doc ol { margin: 0.8em 0; padding-left: 1.6em; line-height: inherit; }
 /* Nested sublists hug their parent item instead of carrying the full block gap. */
