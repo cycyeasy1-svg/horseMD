@@ -117,10 +117,18 @@ docs/                  architecture / features / implementation-notes / developm
   theme is active (`body.hm-has-custom-theme`) app.css yields the writing area's
   background/width AND sets content text `color: inherit` so the theme's colors win;
   the app chrome keeps its own styling. `applyTheme` preserves `hm-*` body classes.
-- **Mermaid** (`editor-mermaid.js`): rendered via a ProseMirror **widget
-  decoration** after each ` ```mermaid ` code block — NOT a node view (don't fight
-  Crepe's CodeMirror). Mermaid is `import()`-ed lazily; the decoration key includes
-  the render status so the finished SVG replaces the "rendering…" placeholder.
+- **Mermaid** (`editor-mermaid.js`): rendered as the code block's **built-in
+  "preview"** (the same `renderPreview`/`previewOnlyByDefault` mechanism Crepe's
+  LaTeX uses) — wired via `codeBlockConfig` in `Editor.jsx`, NOT a widget
+  decoration or node view (don't fight Crepe's CodeMirror). The diagram shows by
+  default with the source hidden; the code block's toolbar gets a Hide/Edit
+  toggle (`previewToggleText` in the `CodeMirror` feature config). A "Mermaid"
+  entry is added to the language picker (`mermaidLanguage`). Mermaid is
+  `import()`-ed lazily and initialized **once per theme**; renders are cached by
+  `theme::code` in an LRU shared with **keep mode** — `getMermaidSvg` (promise) /
+  `peekMermaidSvg` (sync peek) render diagrams OUTSIDE ProseMirror for
+  `KeepEditor`, so a diagram drawn in one paints instantly in the other. A block
+  holding 2+ diagrams is split into one block each by `createMermaidSplitPlugin`.
 - **Math**: enable `CrepeFeature.Latex` (off by default). Block math needs `$$` on
   their own lines. Long display math scrolls (`.katex-display { overflow-x:auto }`).
 - **Table-cell line breaks** (`editor-tablebreak.js`): GFM cells are single-line,

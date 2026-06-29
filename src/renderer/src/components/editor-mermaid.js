@@ -1,25 +1,19 @@
-// Live Mermaid rendering for ```mermaid code blocks.
+// Live Mermaid rendering for ```mermaid code blocks — via Crepe's built-in
+// code-block "preview" mechanism, the same one LaTeX uses. The diagram is the
+// block's preview, shown by default with the source hidden; the code block's own
+// toolbar gets a Hide/Edit toggle (next to Copy). No custom widget decoration.
 //
-// Crepe's CodeMirror feature owns the `code_block` node view, so we DON'T try to
-// replace it. Instead a ProseMirror plugin paints a widget *decoration* right
-// after each mermaid code block — the editable source stays a normal CodeMirror
-// block, and the rendered diagram appears beneath it (Typora-style live preview).
-// Decorations are PM's sanctioned channel for non-document DOM, so this never
-// fights the editor's own DOM management.
-//
-// Mermaid is loaded lazily (dynamic import) only when a diagram is actually
-// present, so the ~3 MB library doesn't weigh on startup for docs without one.
+// Mermaid is loaded lazily (dynamic import) only when a diagram is present.
+// Rendered SVGs are cached by theme::code so re-renders are instant and the two
+// themes don't clobber each other. The SAME cache also backs getMermaidSvg /
+// peekMermaidSvg below, so a diagram drawn in keep mode paints instantly in the
+// rich editor and vice-versa.
 import { Plugin, PluginKey } from '@milkdown/prose/state'
-import { Decoration, DecorationSet } from '@milkdown/prose/view'
 
-// Rendered SVGs cached by `theme::code` so re-renders (every keystroke rebuilds
-// the decoration set) reuse the previous SVG instead of re-running Mermaid, and
-// light/dark variants don't clobber each other. Shared across editor instances.
-//
-// Capped LRU so a long session editing many distinct diagrams (each keystroke
-// produces a new key) doesn't grow the cache without bound. Map preserves
-// insertion order, so the oldest key is evicted first; reads re-insert the hit
-// to mark it most-recently-used.
+// Capped LRU cache keyed by `theme::code`. Map preserves insertion order, so the
+// oldest key is evicted first; a read re-inserts the hit to mark it MRU. Caps the
+// growth from a long session editing many distinct diagrams (each keystroke
+// produces a new key). Values are { svg } or { error }.
 const CACHE_MAX = 120
 const cache = new Map()
 const cacheGet = (k) => {
@@ -34,9 +28,16 @@ const cacheSet = (k, v) => {
   cache.set(k, v)
   while (cache.size > CACHE_MAX) cache.delete(cache.keys().next().value)
 }
-const pending = new Set()
-let seq = 0
+
+// Renders in flight, keyed by theme::code → array of waiting onDone callbacks.
+// Using a Map (not a Set) means a SECOND block with the same source (or any
+// caller that arrives mid-render) still gets its onDone fired when the render
+// lands — otherwise it would sit on "rendering…" forever.
+const pending = new Map()
+const retried = new Set() // keys whose first render errored and get a one-shot retry
 let mermaidMod = null
+let mermaidTheme = null // theme mermaid was last initialize()d for
+let idSeq = 0 // monotonic render id (guaranteed unique, unlike Math.random)
 
 async function getMermaid() {
   if (mermaidMod) return mermaidMod
@@ -45,166 +46,180 @@ async function getMermaid() {
   return mermaidMod
 }
 
-// Reusable, promise-returning render for callers OUTSIDE ProseMirror (keep mode).
-// Shares the same theme-keyed LRU cache as the editor plugin, so a diagram already
-// drawn in the rich editor paints instantly here (and vice-versa). Concurrent
-// requests for the same diagram share one in-flight promise instead of re-running
-// Mermaid. Resolves to { svg } or { error }.
-const inflight = new Map()
-// Synchronous cache peek — lets a caller paint an already-rendered diagram with no
-// async flash (e.g. keep mode re-renders on every edit). null = not yet rendered.
-export function peekMermaidSvg(code, theme = curTheme()) {
-  return cacheGet(keyFor(theme, (code || '').trim())) || null
-}
-export async function getMermaidSvg(code, theme = curTheme()) {
-  const trimmed = (code || '').trim()
-  if (!trimmed) return { error: '' }
-  const k = keyFor(theme, trimmed)
-  const hit = cacheGet(k)
-  if (hit) return hit
-  if (inflight.has(k)) return inflight.get(k)
-  const p = (async () => {
-    const id = 'hm-mermaid-k' + ++seq
-    try {
-      const mermaid = await getMermaid()
-      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
-      const { svg } = await mermaid.render(id, trimmed)
-      const r = { svg }
-      cacheSet(k, r)
-      return r
-    } catch (e) {
-      const r = { error: (e && e.message) || String(e) }
-      cacheSet(k, r)
-      return r
-    } finally {
-      document.getElementById(id)?.remove()
-      document.getElementById('d' + id)?.remove()
-      inflight.delete(k)
-    }
-  })()
-  inflight.set(k, p)
-  return p
-}
-
 const curTheme = () => (document.body.classList.contains('dark') ? 'dark' : 'default')
 const keyFor = (theme, code) => theme + '::' + code
 
-// Render `code` to an SVG (async, cached). `refresh` re-dispatches the plugin so
-// the freshly-cached SVG replaces the "rendering…" placeholder.
-async function ensureRender(theme, code, refresh) {
+// Render `code` to an SVG (async, cached), then call every onDone waiting on it.
+// Mermaid is initialize()d at most once per theme (re-initializing on every
+// render is a known way to break subsequent diagrams). The FIRST render after
+// the lazy import can race with Mermaid's init and fail — on error we retry once
+// before caching the error.
+async function ensureRender(theme, code, onDone) {
   const k = keyFor(theme, code)
-  if (cache.has(k) || pending.has(k)) return
-  pending.add(k)
-  const id = 'hm-mermaid-' + ++seq
+  if (cacheGet(k)) {
+    onDone?.()
+    return
+  }
+  const waiters = pending.get(k)
+  if (waiters) {
+    // Already rendering this exact source — just queue, don't start a second.
+    waiters.push(onDone)
+    return
+  }
+  pending.set(k, onDone ? [onDone] : [])
+  const id = 'hm-mermaid-' + ++idSeq
+  let result = null
   try {
     const mermaid = await getMermaid()
-    // Re-initialize per render so the diagram matches the current theme.
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+    if (mermaidTheme !== theme) {
+      mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme })
+      mermaidTheme = theme
+    }
     const { svg } = await mermaid.render(id, code)
-    cacheSet(k, { svg })
+    result = { svg }
+    retried.delete(k)
   } catch (e) {
-    cacheSet(k, { error: (e && e.message) || String(e) })
+    if (!retried.has(k)) {
+      retried.add(k)
+      pending.delete(k)
+      document.getElementById(id)?.remove()
+      document.getElementById('d' + id)?.remove()
+      setTimeout(() => ensureRender(theme, code, onDone), 300)
+      return
+    }
+    result = { error: (e && e.message) || String(e) }
+    retried.delete(k)
   } finally {
+    if (result) cacheSet(k, result)
+    const cbs = pending.get(k) || []
     pending.delete(k)
-    // Mermaid leaves a temporary element behind on syntax errors; clean it up.
     document.getElementById(id)?.remove()
     document.getElementById('d' + id)?.remove()
-    refresh()
+    cbs.forEach((cb) => cb?.())
   }
 }
 
-function renderDom(code, refresh, t) {
-  const wrap = document.createElement('div')
-  wrap.className = 'hm-mermaid-preview'
-  wrap.setAttribute('contenteditable', 'false')
+// ---- keep-mode API (callers OUTSIDE ProseMirror, e.g. KeepEditor) -------------
+// Synchronous cache peek — paint an already-rendered diagram with no async flash
+// (keep mode re-renders on every edit). null = not yet rendered.
+export function peekMermaidSvg(code, theme = curTheme()) {
+  return cacheGet(keyFor(theme, (code || '').trim())) || null
+}
+// Promise-returning render that shares the cache above. Resolves to { svg } or
+// { error }. Concurrent requests for the same diagram share one in-flight render.
+export function getMermaidSvg(code, theme = curTheme()) {
   const trimmed = (code || '').trim()
-  if (!trimmed) {
-    wrap.classList.add('hm-mermaid-hint')
-    wrap.textContent = t('mermaid.empty')
-    return wrap
-  }
+  if (!trimmed) return Promise.resolve({ error: '' })
+  const k = keyFor(theme, trimmed)
+  const hit = cacheGet(k)
+  if (hit) return Promise.resolve(hit)
+  return new Promise((resolve) => {
+    ensureRender(theme, trimmed, () => resolve(cacheGet(k) || { error: '' }))
+  })
+}
+
+// ---- rich-editor preview (Crepe code-block renderPreview) ---------------------
+// The HTML string to show as the block's preview for a given mermaid source.
+// Kicks off (or reuses) a render; `onUpdate` fires when an async render lands.
+function previewHtml(code, t, onUpdate) {
+  const trimmed = (code || '').trim()
+  if (!trimmed) return ''
   const theme = curTheme()
   const c = cacheGet(keyFor(theme, trimmed))
-  if (c && c.svg) {
-    wrap.innerHTML = c.svg
-  } else if (c && c.error) {
-    wrap.classList.add('hm-mermaid-error')
-    wrap.textContent = t('mermaid.error') + ' ' + c.error
-  } else {
-    wrap.classList.add('hm-mermaid-hint')
-    wrap.textContent = t('mermaid.rendering')
-    ensureRender(theme, trimmed, refresh)
-  }
-  return wrap
+  if (c && c.svg) return c.svg
+  if (c && c.error) return `<div class="hm-mermaid-error">${t('mermaid.error')} ${escapeHtml(c.error)}</div>`
+  ensureRender(theme, trimmed, onUpdate)
+  return `<div class="hm-mermaid-hint">${t('mermaid.rendering')}</div>`
 }
 
-// Render status of a code, used in the decoration key so the widget DOM is
-// recreated (toDOM re-runs) when the async render finishes — ProseMirror reuses a
-// widget's DOM as long as its key is unchanged, so without this the "rendering…"
-// placeholder would never be replaced by the finished SVG.
-function statusFor(code) {
-  const c = cache.get(keyFor(curTheme(), (code || '').trim()))
-  if (!c) return 'wait'
-  return c.svg ? 'done' : 'err'
-}
+const escapeHtml = (s) =>
+  String(s).replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]))
 
-function buildDecos(doc, refresh, t) {
-  const decos = []
-  doc.descendants((node, pos) => {
-    if (
-      node.type.name === 'code_block' &&
-      String(node.attrs.language || '').toLowerCase() === 'mermaid'
-    ) {
-      const code = node.textContent
-      decos.push(
-        Decoration.widget(pos + node.nodeSize, () => renderDom(code, refresh, t), {
-          side: 1,
-          // Key changes when the source, theme, or render status changes — each of
-          // which must re-run toDOM. (Same key → PM keeps the old widget DOM.)
-          key: 'hm-mermaid:' + curTheme() + ':' + statusFor(code) + ':' + code
-        })
-      )
-      return false // don't descend into the code block's text
-    }
-    return undefined
-  })
-  return DecorationSet.create(doc, decos)
-}
-
-// Build a per-editor plugin instance (the view reference it holds is per editor;
-// several editor panes can be mounted at once). `getT` is the live translator.
-export function createMermaidPlugin(getT) {
-  const key = new PluginKey('hm-mermaid')
-  const holder = {}
-  const refresh = () => {
-    const v = holder.view
-    if (v && !v.isDestroyed) v.dispatch(v.state.tr.setMeta(key, true))
-  }
+// Build the `renderPreview(language, text, setPreview)` for codeBlockConfig.
+// Returns null for non-mermaid blocks (no preview, no toggle → normal code
+// block). For mermaid, returns the diagram HTML synchronously when cached, or
+// kicks the async render and updates via setPreview when it lands.
+export function createMermaidPreviewRenderer(getT) {
   const t = (k) => (getT ? getT(k) : k)
+  return (language, text, setPreview) => {
+    const lang = String(language || '').toLowerCase()
+    if (lang !== 'mermaid') return null
+    const html = previewHtml(text, t, () => setPreview(previewHtml(text, t, () => {})))
+    return html // a string return sets the preview immediately (sync path)
+  }
+}
+
+// ---- multi-diagram split ------------------------------------------------------
+// Mermaid diagram-type keywords that START a new diagram. A diagram header = a
+// directional keyword + direction (`flowchart TD` / `graph LR`) OR a standalone
+// keyword (`sequenceDiagram`, …). The direction requirement avoids matching
+// common words (`graph`, `pie`) inside labels/text.
+const DIRECTIONS = '(?:TB|TD|BT|RL|LR)'
+const DIAGRAM_HEADER = new RegExp(
+  '(?:flowchart|graph)\\s+' + DIRECTIONS + '\\b' +
+    '|(?:sequenceDiagram|classDiagram|stateDiagram(?:-v2)?|erDiagram|gantt|journey|gitGraph|mindmap|timeline|quadrantChart|requirementDiagram|C4Context)(?=\\s|$)',
+  'gi'
+)
+
+// Does `text` begin with a mermaid diagram header? (Kept here for parity with
+// upstream; the paste handler carries its own inlined copy in editor-md-paste.js.)
+export function startsAsMermaid(text) {
+  const t = String(text || '').trim()
+  if (!t) return false
+  DIAGRAM_HEADER.lastIndex = 0
+  const m = DIAGRAM_HEADER.exec(t)
+  return !!m && m.index === 0
+}
+
+// Split mermaid source into one chunk per diagram, by finding every diagram
+// header ANYWHERE (a 2nd paste often concatenates mid-line: `…Car]flowchart TD`,
+// so a line-start check misses it). Returns [] for a single/empty diagram.
+function splitDiagrams(text) {
+  const t = String(text || '').replace(/\r\n?/g, '\n')
+  DIAGRAM_HEADER.lastIndex = 0
+  const idx = []
+  let m
+  while ((m = DIAGRAM_HEADER.exec(t))) idx.push(m.index)
+  if (idx.length <= 1) return []
+  const segs = []
+  for (let i = 0; i < idx.length; i++) {
+    const seg = t.slice(idx[i], idx[i + 1] ?? t.length).replace(/^\s+|\s+$/g, '')
+    if (seg) segs.push(seg)
+  }
+  return segs
+}
+
+// appendTransaction plugin: when a mermaid block ends up holding 2+ diagrams,
+// split it into one code_block per diagram. Catches the "paste a 2nd diagram
+// into the block" mashup (the paste itself is handled by CodeMirror, below the
+// ProseMirror layer, so we react after the fact). Idempotent — each resulting
+// block has one diagram, so it won't re-split.
+export function createMermaidSplitPlugin() {
   return new Plugin({
-    key,
-    state: {
-      init: (_, state) => buildDecos(state.doc, refresh, t),
-      apply: (tr, old, _o, newState) => {
-        if (tr.docChanged || tr.getMeta(key)) return buildDecos(newState.doc, refresh, t)
-        return old.map(tr.mapping, tr.doc)
-      }
-    },
-    props: {
-      decorations(state) {
-        return key.getState(state)
-      }
-    },
-    view(view) {
-      holder.view = view
-      // init() ran before the view existed, so diagrams present on first paint
-      // never kicked off a render. Trigger one now that we can dispatch.
-      Promise.resolve().then(refresh)
-      return {
-        destroy() {
-          holder.view = null
+    key: new PluginKey('hm-mermaid-split'),
+    appendTransaction(transs, _oldState, newState) {
+      if (!transs.some((t) => t.docChanged)) return null
+      const jobs = []
+      newState.doc.descendants((node, pos) => {
+        if (
+          node.type.name === 'code_block' &&
+          String(node.attrs.language || '').toLowerCase() === 'mermaid'
+        ) {
+          const segs = splitDiagrams(node.textContent)
+          if (segs.length > 1) jobs.push({ pos, size: node.nodeSize, segs })
         }
+        return true
+      })
+      if (!jobs.length) return null
+      const tr = newState.tr
+      // Replace from the last block back so earlier positions stay valid.
+      jobs.sort((a, b) => b.pos - a.pos)
+      for (const { pos, size, segs } of jobs) {
+        const type = newState.schema.nodes.code_block
+        const nodes = segs.map((s) => type.create({ language: 'mermaid' }, s ? newState.schema.text(s) : null))
+        tr.replaceWith(pos, pos + size, nodes)
       }
+      return tr.setMeta('addToHistory', false)
     }
   })
 }

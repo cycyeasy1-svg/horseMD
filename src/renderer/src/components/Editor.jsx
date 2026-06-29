@@ -11,6 +11,8 @@ import {
 } from '@milkdown/kit/core'
 import { imageBlockConfig } from '@milkdown/kit/component/image-block'
 import { inlineImageConfig } from '@milkdown/kit/component/image-inline'
+import { codeBlockConfig } from '@milkdown/kit/component/code-block'
+import { LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language'
 import { inlineCodeSchema } from '@milkdown/kit/preset/commonmark'
 import { TextSelection } from '@milkdown/prose/state'
 import '@milkdown/crepe/theme/common/style.css'
@@ -22,7 +24,7 @@ import { fireToast } from '../ui.js'
 import { renderHtmlNodeView, convertBlock, mergeInlineHtmlRemarkPlugin } from './editor-html.js'
 import { dirOf, isRelativePath, resolveToFileUrl } from './editor-images.js'
 import { inlineRichStyles } from './editor-copy.js'
-import { createMermaidPlugin } from './editor-mermaid.js'
+import { createMermaidPreviewRenderer, createMermaidSplitPlugin } from './editor-mermaid.js'
 import { tableBreakKeymap, tableCellBreakHandler, brToBreakRemarkPlugin } from './editor-tablebreak.js'
 import { attachMdPasteHandler } from './editor-md-paste.js'
 import remarkFrontmatter from 'remark-frontmatter'
@@ -35,6 +37,20 @@ import { frontmatterSchema, renderFrontmatterNodeView, remarkFrontmatterAnywhere
 // instead of capturing a single instance, which previously made the button act
 // on the wrong (hidden) tab when more than one tab was open.
 const liveEditors = new Set()
+
+// A "Mermaid" entry for the code-block language picker. Mermaid has no real
+// CodeMirror language (the diagram is rendered via the code-block preview in
+// editor-mermaid.js), so load() returns a no-op language — the picker just needs
+// to offer it so users can set a block's language to "mermaid" directly, instead
+// of only via the ```mermaid fence info string.
+const mermaidLanguage = LanguageDescription.of({
+  name: 'Mermaid',
+  alias: ['mermaid', 'mmd'],
+  extensions: ['mmd', 'mermaid'],
+  async load() {
+    return new LanguageSupport(StreamLanguage.define(() => ({ token: () => null })))
+  }
+})
 
 // Localize the image-block / inline-image UI text (caption placeholder, upload
 // buttons…) from the current translator. Applied at create and re-applied on a
@@ -191,7 +207,14 @@ export default function Editor({
         // Localize the code-block "Copy" button label. (Visual feedback on click
         // is added via a delegated handler below + CSS, since Crepe gives no
         // built-in "Copied!" state.)
-        [CrepeFeature.CodeMirror]: { copyText: t('code.copy') }
+        [CrepeFeature.CodeMirror]: {
+          copyText: t('code.copy'),
+          // previewToggleText is consumed by the feature to BUILD the toggle
+          // button, so it must live in the feature config (not codeBlockConfig)
+          // — otherwise the Mermaid Hide/Edit label stays English.
+          previewToggleText: (previewOnly) =>
+            previewOnly ? t('mermaid.editCode') : t('mermaid.hideCode')
+        }
       }
     })
 
@@ -218,13 +241,26 @@ export default function Editor({
       // language switch preserves this onUpload.
       ctx.update(imageBlockConfig.key, (v) => ({ ...v, onUpload: persistImage }))
       ctx.update(inlineImageConfig.key, (v) => ({ ...v, onUpload: persistImage }))
-      // Live-render ```mermaid code blocks as diagrams (widget decoration after
-      // the editable source — see editor-mermaid.js).
+      // Offer "Mermaid" in the code-block language picker (shown first), and
+      // render a ```mermaid block's diagram as the block's "preview" — the same
+      // built-in mechanism LaTeX uses: shown by default with the source hidden,
+      // with a Hide/Edit toggle in the toolbar next to Copy. Non-mermaid blocks
+      // have no preview, so their source always shows. See editor-mermaid.js.
+      ctx.update(codeBlockConfig.key, (v) => ({
+        ...v,
+        languages: [mermaidLanguage, ...(v.languages || [])],
+        renderPreview: createMermaidPreviewRenderer((k) => tRef.current(k)),
+        previewOnlyByDefault: true,
+        previewLabel: t('mermaid.diagram'),
+        previewLoading: t('mermaid.rendering')
+      }))
       ctx.update(prosePluginsCtx, (plugins) => [
         ...plugins,
         // Table-cell line break (issue #7): keymap first so it wins Enter inside a cell.
         tableBreakKeymap(),
-        createMermaidPlugin((k) => tRef.current(k))
+        // Split a mermaid block that holds 2+ diagrams (e.g. a 2nd paste appended
+        // into the same block) back into one block per diagram.
+        createMermaidSplitPlugin()
       ])
       // Table-cell line break — serialize a break to <br> inside a cell, and parse
       // inline <br> back into a break (see editor-tablebreak.js).

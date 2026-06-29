@@ -991,22 +991,9 @@ button:focus-visible,
   animation: menuFadeIn 0.12s var(--ease-out);
 }
 
-/* ---- Mermaid live preview (rendered under a ```mermaid code block) ---- */
-.hm-mermaid-preview {
-  margin: 2px 0 16px;
-  padding: 16px 18px;
-  background: var(--bg-elevated);
-  border: 1px solid var(--border-soft);
-  border-radius: var(--radius-md);
-  display: flex;
-  justify-content: center;
-  overflow-x: auto;
-  user-select: none;
-}
-.hm-mermaid-preview svg {
-  max-width: 100%;
-  height: auto;
-}
+/* ---- Mermaid live preview ---- */
+/* Preview states shown inside the code-block's built-in preview panel
+   (rich editor) and inside keep mode's .km-mermaid block. */
 .hm-mermaid-hint {
   color: var(--faint);
   font-size: 13px;
@@ -2950,6 +2937,17 @@ body.dark .milkdown {
   overflow-x: auto;
   overflow-y: hidden;
 }
+/* Mermaid diagram inside a code block's built-in preview panel: center it. */
+.milkdown .milkdown-code-block .preview:has(svg),
+.milkdown .milkdown-code-block .preview .hm-mermaid-hint,
+.milkdown .milkdown-code-block .preview .hm-mermaid-error {
+  display: flex;
+  justify-content: center;
+  padding: 8px 4px;
+}
+.milkdown .milkdown-code-block .preview svg {
+  height: auto;
+}
 .milkdown .katex-display {
   padding: 4px 2px;
 }
@@ -3677,8 +3675,8 @@ body.hm-full-width .km-doc {
    so the text overflows its node and gets clipped. Reset the label typography to
    Mermaid's own assumptions. Applied to the rich preview too, harmlessly, so a
    diagram can never clip there either. */
-.hm-mermaid-preview foreignObject,
-.hm-mermaid-preview foreignObject *,
+.milkdown .milkdown-code-block .preview foreignObject,
+.milkdown .milkdown-code-block .preview foreignObject *,
 .km-doc .km-mermaid foreignObject,
 .km-doc .km-mermaid foreignObject * {
   line-height: normal;

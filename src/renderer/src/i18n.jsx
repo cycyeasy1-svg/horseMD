@@ -177,6 +177,9 @@ export const STRINGS = {
     'mermaid.rendering': 'Rendering diagram…',
     'mermaid.empty': 'Empty mermaid block',
     'mermaid.error': 'Diagram error:',
+    'mermaid.editCode': 'Edit code',
+    'mermaid.hideCode': 'Hide code',
+    'mermaid.diagram': 'Diagram',
 
     // block types
     'block.turnInto': 'Turn into',
@@ -420,6 +423,9 @@ export const STRINGS = {
     'mermaid.rendering': '正在渲染图表…',
     'mermaid.empty': '空的 mermaid 代码块',
     'mermaid.error': '图表错误：',
+    'mermaid.editCode': '编辑代码',
+    'mermaid.hideCode': '隐藏代码',
+    'mermaid.diagram': '图表',
 
     'block.turnInto': '转换为',
     'block.paragraph': '正文',
@@ -666,6 +672,9 @@ export const STRINGS = {
     'mermaid.rendering': '図を描画中…',
     'mermaid.empty': '空の mermaid ブロック',
     'mermaid.error': '図のエラー：',
+    'mermaid.editCode': 'コードを編集',
+    'mermaid.hideCode': 'コードを隠す',
+    'mermaid.diagram': '図',
 
     // block types
     'block.turnInto': '変換',
