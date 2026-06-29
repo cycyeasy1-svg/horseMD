@@ -2841,7 +2841,8 @@ body.dark .milkdown {
   /* Body font size is user-adjustable (status bar). Headings/code use em, so the
      whole document scales from this one value. Falls back to 16px. */
   font-size: var(--editor-font-size, 16px);
-  line-height: 1.8;
+  /* Line height + paragraph spacing are user-adjustable too (status-bar layout). */
+  line-height: var(--editor-line-height, 1.8);
   user-select: text;
   /* High-contrast caret so the cursor is easy to find while writing */
   caret-color: var(--accent);
@@ -2910,10 +2911,10 @@ body.dark .milkdown {
   margin-top: 0;
 }
 
-/* Paragraphs — enhanced readability */
+/* Paragraphs — enhanced readability. Vertical spacing is user-adjustable. */
 .milkdown .ProseMirror p {
-  margin: 0.8em 0;
-  line-height: 1.85;
+  margin: var(--editor-para-spacing, 0.8em) 0;
+  line-height: inherit;
 }
 .milkdown .ProseMirror > p:first-child {
   margin-top: 0;

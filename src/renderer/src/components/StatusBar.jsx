@@ -14,7 +14,13 @@ import {
   ZOOM_PRESETS,
   ZOOM_MIN,
   ZOOM_MAX,
-  ZOOM_STEP
+  ZOOM_STEP,
+  LINE_HEIGHT_PRESETS,
+  LINE_HEIGHT_MIN,
+  LINE_HEIGHT_MAX,
+  PARA_SPACING_PRESETS,
+  PARA_SPACING_MIN,
+  PARA_SPACING_MAX
 } from '../settings.js'
 
 const zoomPct = (z) => Math.round(z * 100) + '%'
@@ -132,7 +138,18 @@ function AdjustGroup({ title, valueLabel, presets, activeIndex, onPick, pct, fro
 // holds both the font-size and editor-width adjusters. Replaces the two separate
 // status-bar buttons so the bar stays uncluttered. `hm-pagewidth` lets mobile
 // hide it via CSS (mobile sets size in the "more" sheet and forces full width).
-function LayoutControl({ fontSize, onSetFontSize, pageWidth, onSetPageWidth, zoom, onSetZoom }) {
+function LayoutControl({
+  fontSize,
+  onSetFontSize,
+  pageWidth,
+  onSetPageWidth,
+  zoom,
+  onSetZoom,
+  lineHeight,
+  onSetLineHeight,
+  paragraphSpacing,
+  onSetParagraphSpacing
+}) {
   const { t } = useI18n()
   const { open, setOpen, ref } = usePopover()
 
@@ -161,6 +178,23 @@ function LayoutControl({ fontSize, onSetFontSize, pageWidth, onSetPageWidth, zoo
     const r = track.getBoundingClientRect()
     const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width))
     return Math.round((PAGE_WIDTH_MIN + p * (PAGE_WIDTH_MAX - PAGE_WIDTH_MIN)) / 10) * 10
+  }
+
+  const round1 = (n) => Math.round(n * 10) / 10
+  const lhPct = (lineHeight - LINE_HEIGHT_MIN) / (LINE_HEIGHT_MAX - LINE_HEIGHT_MIN)
+  const lhIdx = LINE_HEIGHT_PRESETS.findIndex((p) => p.value === lineHeight)
+  const lhFromX = (track, clientX) => {
+    const r = track.getBoundingClientRect()
+    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width))
+    return round1(LINE_HEIGHT_MIN + p * (LINE_HEIGHT_MAX - LINE_HEIGHT_MIN))
+  }
+
+  const psPct = (paragraphSpacing - PARA_SPACING_MIN) / (PARA_SPACING_MAX - PARA_SPACING_MIN)
+  const psIdx = PARA_SPACING_PRESETS.findIndex((p) => p.value === paragraphSpacing)
+  const psFromX = (track, clientX) => {
+    const r = track.getBoundingClientRect()
+    const p = Math.min(1, Math.max(0, (clientX - r.left) / r.width))
+    return round1(PARA_SPACING_MIN + p * (PARA_SPACING_MAX - PARA_SPACING_MIN))
   }
 
   return (
@@ -201,6 +235,34 @@ function LayoutControl({ fontSize, onSetFontSize, pageWidth, onSetPageWidth, zoo
             pct={zoomPctVal}
             fromX={zoomFromX}
             onSet={onSetZoom}
+          />
+          <div className="hm-pop-sep" />
+          <AdjustGroup
+            title={t('settings.lineHeight')}
+            valueLabel={lineHeight.toFixed(2)}
+            presets={LINE_HEIGHT_PRESETS.map((p) => ({
+              ...p,
+              label: t('settings.lineHeightPreset.' + p.id)
+            }))}
+            activeIndex={lhIdx}
+            onPick={(p) => onSetLineHeight(p.value)}
+            pct={lhPct}
+            fromX={lhFromX}
+            onSet={onSetLineHeight}
+          />
+          <div className="hm-pop-sep" />
+          <AdjustGroup
+            title={t('settings.paragraphSpacing')}
+            valueLabel={paragraphSpacing.toFixed(1) + ' em'}
+            presets={PARA_SPACING_PRESETS.map((p) => ({
+              ...p,
+              label: t('settings.paraSpacingPreset.' + p.id)
+            }))}
+            activeIndex={psIdx}
+            onPick={(p) => onSetParagraphSpacing(p.value)}
+            pct={psPct}
+            fromX={psFromX}
+            onSet={onSetParagraphSpacing}
           />
         </div>
       )}
@@ -576,6 +638,10 @@ export default function StatusBar({
   onSetFontSize,
   zoom,
   onSetZoom,
+  lineHeight,
+  onSetLineHeight,
+  paragraphSpacing,
+  onSetParagraphSpacing,
   customThemes,
   customTheme,
   onPickCustom,
@@ -693,6 +759,10 @@ export default function StatusBar({
               onSetPageWidth={onSetPageWidth}
               zoom={zoom}
               onSetZoom={onSetZoom}
+              lineHeight={lineHeight}
+              onSetLineHeight={onSetLineHeight}
+              paragraphSpacing={paragraphSpacing}
+              onSetParagraphSpacing={onSetParagraphSpacing}
             />
             <ThemePicker
               theme={theme}

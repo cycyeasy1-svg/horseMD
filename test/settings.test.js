@@ -34,12 +34,28 @@ describe('loadSettings / saveSettings', () => {
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
   })
   it('round-trips saved values', () => {
+    const saved = { pageWidth: 900, fontSize: 18, zoom: 1.25, lineHeight: 2.0, paragraphSpacing: 1.2 }
+    saveSettings(saved)
+    expect(loadSettings()).toEqual(saved)
+  })
+  it('fills line-height / paragraph-spacing defaults when absent', () => {
     saveSettings({ pageWidth: 900, fontSize: 18, zoom: 1.25 })
-    expect(loadSettings()).toEqual({ pageWidth: 900, fontSize: 18, zoom: 1.25 })
+    const s = loadSettings()
+    expect(s.lineHeight).toBe(DEFAULT_SETTINGS.lineHeight)
+    expect(s.paragraphSpacing).toBe(DEFAULT_SETTINGS.paragraphSpacing)
   })
   it('clamps out-of-range stored values on load', () => {
-    localStorage.setItem(SETTINGS_KEY, JSON.stringify({ pageWidth: 5000, fontSize: 99, zoom: 9 }))
-    expect(loadSettings()).toEqual({ pageWidth: 1400, fontSize: 24, zoom: 2 })
+    localStorage.setItem(
+      SETTINGS_KEY,
+      JSON.stringify({ pageWidth: 5000, fontSize: 99, zoom: 9, lineHeight: 9, paragraphSpacing: 9 })
+    )
+    expect(loadSettings()).toEqual({
+      pageWidth: 1400,
+      fontSize: 24,
+      zoom: 2,
+      lineHeight: 2.4,
+      paragraphSpacing: 2
+    })
   })
   it('keeps the "full" page-width preset as-is', () => {
     saveSettings({ pageWidth: 'full', fontSize: 16, zoom: 1 })

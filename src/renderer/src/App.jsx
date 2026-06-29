@@ -24,6 +24,8 @@ import {
   applyPageWidth,
   applyFontSize,
   applyZoom,
+  applyLineHeight,
+  applyParagraphSpacing,
   normalizeZoom,
   ZOOM_STEP,
   DEFAULT_ZOOM
@@ -320,6 +322,12 @@ export default function App() {
   useEffect(() => {
     applyZoom(settings.zoom)
   }, [settings.zoom])
+  useEffect(() => {
+    applyLineHeight(settings.lineHeight)
+  }, [settings.lineHeight])
+  useEffect(() => {
+    applyParagraphSpacing(settings.paragraphSpacing)
+  }, [settings.paragraphSpacing])
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
@@ -2205,6 +2213,10 @@ export default function App() {
         onSetFontSize={(s) => updateSettings({ fontSize: s })}
         zoom={settings.zoom}
         onSetZoom={(z) => updateSettings({ zoom: normalizeZoom(z) })}
+        lineHeight={settings.lineHeight}
+        onSetLineHeight={(v) => updateSettings({ lineHeight: v })}
+        paragraphSpacing={settings.paragraphSpacing}
+        onSetParagraphSpacing={(v) => updateSettings({ paragraphSpacing: v })}
         filterInfo={activeTab ? keepFilters[activeTab.id] : null}
       />
 
