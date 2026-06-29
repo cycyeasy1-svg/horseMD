@@ -3642,19 +3642,12 @@ body.hm-full-width .km-doc {
 .km-doc > .km-block:first-child > :nth-child(2) {
   margin-top: 0;
 }
-/* Block spacing: the status-bar "paragraph spacing" slider controls the uniform
-   vertical gap between top-level blocks (headings, paragraphs, lists, quotes,
-   code, …) — keep mode wraps every block in a .km-block, so this reads naturally
-   as block spacing. The gap lives on the block boundary; each block's own
-   top-level element vertical margins are zeroed so they don't stack with it.
-   (.km-doc prefix gives this enough specificity to win over .km-doc p etc.) */
-.km-doc .km-block + .km-block {
-  margin-top: var(--editor-para-spacing, 0.8em);
-}
-.km-doc .km-block > * {
-  margin-top: 0;
-  margin-bottom: 0;
-}
+/* Block spacing: the status-bar "paragraph spacing" slider scales every block's
+   vertical margins by --editor-para-scale (1 at the "standard" preset, so the
+   default look is unchanged). Headings/quotes/code keep their larger margins,
+   just multiplied — so the document's vertical rhythm grows/shrinks as a whole
+   while preserving the heading hierarchy. The base em values below are the
+   original margins; calc(base * scale) leaves them identical at scale 1. */
 /* Edit-source entry point: a pencil pill at the block's top-right, revealed on
    hover. Anchored to the right so its label is never clipped by the scroll
    container (the old left-gutter placement cut off wider labels like the
@@ -3790,7 +3783,7 @@ body.hm-full-width .km-doc {
 .km-doc h6 {
   font-weight: 700;
   line-height: 1.3;
-  margin: 1.8em 0 0.6em;
+  margin: calc(1.8em * var(--editor-para-scale, 1)) 0 calc(0.6em * var(--editor-para-scale, 1));
   color: var(--text-strong);
 }
 .km-doc h1 {
@@ -3812,9 +3805,9 @@ body.hm-full-width .km-doc {
   text-transform: uppercase;
   letter-spacing: 0.05em;
 }
-.km-doc p { margin: 0.8em 0; line-height: inherit; }
+.km-doc p { margin: calc(0.8em * var(--editor-para-scale, 1)) 0; line-height: inherit; }
 .km-doc ul,
-.km-doc ol { margin: 0.8em 0; padding-left: 1.6em; line-height: inherit; }
+.km-doc ol { margin: calc(0.8em * var(--editor-para-scale, 1)) 0; padding-left: 1.6em; line-height: inherit; }
 /* Nested sublists hug their parent item instead of carrying the full block gap. */
 .km-doc li > ul,
 .km-doc li > ol { margin: 0.2em 0; }
@@ -3826,7 +3819,7 @@ body.hm-full-width .km-doc {
 }
 .km-doc a:hover { border-color: var(--accent); }
 .km-doc blockquote {
-  margin: 1.5em 0;
+  margin: calc(1.5em * var(--editor-para-scale, 1)) 0;
   padding: 0.5em 1.5em;
   border-left: 4px solid var(--accent);
   background: var(--accent-soft);
@@ -3838,7 +3831,7 @@ body.hm-full-width .km-doc {
   border: 1px solid var(--code-border);
   border-radius: var(--radius-md);
   padding: 16px 18px;
-  margin: 1.5em 0;
+  margin: calc(1.5em * var(--editor-para-scale, 1)) 0;
   overflow-x: auto;
   line-height: 1.6;
 }
@@ -3863,7 +3856,7 @@ body.hm-full-width .km-doc {
 /* Keep-mode embeds: ```mermaid → diagram, $$…$$ → KaTeX. Centered like the rich
    editor's mermaid preview; both edit through the block "edit source" button. */
 .km-doc .km-mermaid {
-  margin: 1.2em 0;
+  margin: calc(1.2em * var(--editor-para-scale, 1)) 0;
   padding: 16px 18px;
   background: var(--bg-elevated);
   border: 1px solid var(--border-soft);
@@ -3877,7 +3870,7 @@ body.hm-full-width .km-doc {
   height: auto;
 }
 .km-doc .km-math {
-  margin: 1.2em 0;
+  margin: calc(1.2em * var(--editor-para-scale, 1)) 0;
   padding: 4px 0;
   overflow-x: auto;
 }
@@ -3899,7 +3892,7 @@ body.hm-full-width .km-doc {
 .km-doc hr {
   border: none;
   border-top: 1px solid var(--border);
-  margin: 2em 0;
+  margin: calc(2em * var(--editor-para-scale, 1)) 0;
 }
 
 /* Tables — Excel-style with per-column filter + double-click cell editing. */
@@ -3912,7 +3905,7 @@ body.hm-full-width .km-doc {
   overflow-x: auto;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
-  margin: 1.2em 0;
+  margin: calc(1.2em * var(--editor-para-scale, 1)) 0;
 }
 /* Synced horizontal scrollbar shown ABOVE a wide table — reachable without
    scrolling down to the table's bottom. The inner spacer is sized to the table

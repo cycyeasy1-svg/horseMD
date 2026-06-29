@@ -185,8 +185,12 @@ export function applyLineHeight(value) {
 }
 
 export function applyParagraphSpacing(value) {
-  document.documentElement.style.setProperty(
-    '--editor-para-spacing',
-    normalizeInRange(value, PARA_SPACING_MIN, PARA_SPACING_MAX, DEFAULT_PARA_SPACING) + 'em'
-  )
+  const v = normalizeInRange(value, PARA_SPACING_MIN, PARA_SPACING_MAX, DEFAULT_PARA_SPACING)
+  const root = document.documentElement.style
+  // Rich editor (.milkdown p) reads the raw em gap. Default 0.8em = unchanged.
+  root.setProperty('--editor-para-spacing', v + 'em')
+  // Keep mode scales every block's margins by this unitless factor (1 at the
+  // "standard" 0.8em preset → identical to the original look; >1 / <1 grows /
+  // shrinks the whole vertical rhythm while preserving heading hierarchy).
+  root.setProperty('--editor-para-scale', String(round1(v / DEFAULT_PARA_SPACING)))
 }
