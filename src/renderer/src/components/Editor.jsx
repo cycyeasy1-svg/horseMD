@@ -4,12 +4,15 @@ import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import {
   editorViewCtx,
   nodeViewCtx,
+  parserCtx,
   prosePluginsCtx,
   remarkPluginsCtx,
   remarkStringifyOptionsCtx
 } from '@milkdown/kit/core'
 import { imageBlockConfig } from '@milkdown/kit/component/image-block'
 import { inlineImageConfig } from '@milkdown/kit/component/image-inline'
+import { codeBlockConfig } from '@milkdown/kit/component/code-block'
+import { LanguageDescription, LanguageSupport, StreamLanguage } from '@codemirror/language'
 import { inlineCodeSchema } from '@milkdown/kit/preset/commonmark'
 import { TextSelection } from '@milkdown/prose/state'
 import '@milkdown/crepe/theme/common/style.css'
@@ -21,8 +24,17 @@ import { fireToast } from '../ui.js'
 import { renderHtmlNodeView, convertBlock, mergeInlineHtmlRemarkPlugin } from './editor-html.js'
 import { dirOf, isRelativePath, resolveToFileUrl } from './editor-images.js'
 import { inlineRichStyles } from './editor-copy.js'
-import { createMermaidPlugin } from './editor-mermaid.js'
+import { createMermaidPreviewRenderer, createMermaidSplitPlugin } from './editor-mermaid.js'
 import { tableBreakKeymap, tableCellBreakHandler, brToBreakRemarkPlugin } from './editor-tablebreak.js'
+import { attachMdPasteHandler } from './editor-md-paste.js'
+import remarkFrontmatter from 'remark-frontmatter'
+import { frontmatterSchema, renderFrontmatterNodeView, remarkFrontmatterAnywhere } from './editor-frontmatter.js'
+import {
+  highlightFeatures,
+  highlightStringifyHandler,
+  applyHighlightInView,
+  HIGHLIGHT_COLORS
+} from './editor-highlight.js'
 
 // Every mounted rich editor registers itself here. A rich-text tab stays mounted
 // after its first activation, so several editors (and several Crepe selection
@@ -31,6 +43,20 @@ import { tableBreakKeymap, tableCellBreakHandler, brToBreakRemarkPlugin } from '
 // instead of capturing a single instance, which previously made the button act
 // on the wrong (hidden) tab when more than one tab was open.
 const liveEditors = new Set()
+
+// A "Mermaid" entry for the code-block language picker. Mermaid has no real
+// CodeMirror language (the diagram is rendered via the code-block preview in
+// editor-mermaid.js), so load() returns a no-op language — the picker just needs
+// to offer it so users can set a block's language to "mermaid" directly, instead
+// of only via the ```mermaid fence info string.
+const mermaidLanguage = LanguageDescription.of({
+  name: 'Mermaid',
+  alias: ['mermaid', 'mmd'],
+  extensions: ['mmd', 'mermaid'],
+  async load() {
+    return new LanguageSupport(StreamLanguage.define(() => ({ token: () => null })))
+  }
+})
 
 // Localize the image-block / inline-image UI text (caption placeholder, upload
 // buttons…) from the current translator. Applied at create and re-applied on a
@@ -187,7 +213,14 @@ export default function Editor({
         // Localize the code-block "Copy" button label. (Visual feedback on click
         // is added via a delegated handler below + CSS, since Crepe gives no
         // built-in "Copied!" state.)
-        [CrepeFeature.CodeMirror]: { copyText: t('code.copy') }
+        [CrepeFeature.CodeMirror]: {
+          copyText: t('code.copy'),
+          // previewToggleText is consumed by the feature to BUILD the toggle
+          // button, so it must live in the feature config (not codeBlockConfig)
+          // — otherwise the Mermaid Hide/Edit label stays English.
+          previewToggleText: (previewOnly) =>
+            previewOnly ? t('mermaid.editCode') : t('mermaid.hideCode')
+        }
       }
     })
 
@@ -202,7 +235,11 @@ export default function Editor({
     // overwrite every component node view (image-block captions, CodeMirror code
     // blocks, tables, list items). Appending here merges with them.
     crepe.editor.config((ctx) => {
-      ctx.update(nodeViewCtx, (views) => [...views, ['html', (node) => renderHtmlNodeView(node)]])
+      ctx.update(nodeViewCtx, (views) => [
+        ...views,
+        ['html', (node) => renderHtmlNodeView(node)],
+        ['frontmatter', (node) => renderFrontmatterNodeView(node)]
+      ])
       // Localize the image caption / upload text to the current language.
       applyImageText(ctx, tRef.current)
       // Route the image-block / inline-image "Upload" button through the image
@@ -210,22 +247,47 @@ export default function Editor({
       // language switch preserves this onUpload.
       ctx.update(imageBlockConfig.key, (v) => ({ ...v, onUpload: persistImage }))
       ctx.update(inlineImageConfig.key, (v) => ({ ...v, onUpload: persistImage }))
-      // Live-render ```mermaid code blocks as diagrams (widget decoration after
-      // the editable source — see editor-mermaid.js).
+      // Offer "Mermaid" in the code-block language picker (shown first), and
+      // render a ```mermaid block's diagram as the block's "preview" — the same
+      // built-in mechanism LaTeX uses: shown by default with the source hidden,
+      // with a Hide/Edit toggle in the toolbar next to Copy. Non-mermaid blocks
+      // have no preview, so their source always shows. See editor-mermaid.js.
+      ctx.update(codeBlockConfig.key, (v) => ({
+        ...v,
+        languages: [mermaidLanguage, ...(v.languages || [])],
+        renderPreview: createMermaidPreviewRenderer((k) => tRef.current(k)),
+        previewOnlyByDefault: true,
+        previewLabel: t('mermaid.diagram'),
+        previewLoading: t('mermaid.rendering')
+      }))
       ctx.update(prosePluginsCtx, (plugins) => [
         ...plugins,
         // Table-cell line break (issue #7): keymap first so it wins Enter inside a cell.
         tableBreakKeymap(),
-        createMermaidPlugin((k) => tRef.current(k))
+        // Split a mermaid block that holds 2+ diagrams (e.g. a 2nd paste appended
+        // into the same block) back into one block per diagram.
+        createMermaidSplitPlugin()
       ])
       // Table-cell line break — serialize a break to <br> inside a cell, and parse
       // inline <br> back into a break (see editor-tablebreak.js).
       ctx.update(remarkStringifyOptionsCtx, (opts) => ({
         ...opts,
-        handlers: { ...(opts?.handlers || {}), break: tableCellBreakHandler }
+        // break → <br> inside a table cell; highlight → ==text== (yellow) or
+        // <mark class="hm-hl-…"> (red/blue). See editor-tablebreak / editor-highlight.
+        handlers: {
+          ...(opts?.handlers || {}),
+          break: tableCellBreakHandler,
+          highlight: highlightStringifyHandler
+        }
       }))
       ctx.update(remarkPluginsCtx, (plugins) => [
         ...plugins,
+        // Parse the `---` YAML block at the top of a doc into a `yaml` node
+        // (handled by the frontmatter block schema), and reconstruct mangled
+        // mid-doc `---` blocks (thematicBreak + Setext heading) back into yaml
+        // nodes so front matter works anywhere.
+        { plugin: remarkFrontmatter, options: undefined },
+        { plugin: remarkFrontmatterAnywhere, options: undefined },
         { plugin: brToBreakRemarkPlugin, options: undefined },
         // Merge balanced inline HTML pairs (<span>…</span>, <sub>…</sub>) into one
         // html node so the node view can render them inline (see editor-html.js).
@@ -244,6 +306,13 @@ export default function Editor({
     crepe.editor.use(
       inlineCodeSchema.extendSchema((prev) => (ctx) => ({ ...prev(ctx), inclusive: false }))
     )
+    // YAML front matter (`---` block at the top) — a block node rendered as a
+    // structured key/value card (see editor-frontmatter.js).
+    crepe.editor.use(frontmatterSchema)
+    // Issue #14: ==highlight== mark (yellow via ==, red/blue via <mark class>) +
+    // Mod-Alt-H shortcut. Pass the whole array — editor.use() registers only its
+    // first arg, so spreading would drop every feature after the first.
+    crepe.editor.use(highlightFeatures)
     crepeRef.current = crepe
 
     // Convert the block the cursor sits in to a given block id (paragraph/h1…h6).
@@ -330,18 +399,21 @@ export default function Editor({
 
     // refreshLevel does forced layout reads (coordsAtPos / getBoundingClientRect).
     // Selection change and scroll fire on every keystroke; on a large document
-    // that synchronous reflow is the main typing lag. Coalesce bursts into one
-    // measurement per animation frame.
-    let levelRaf = 0
+    // that synchronous reflow is the main typing lag AND the main cause of the
+    // scroll "chase" (#17) — the main thread is busy reflowing while the
+    // compositor piles up scroll frames.
+    // Throttle: at most once per 200ms (not per frame). On fast scroll the level
+    // badge simply doesn't update until you pause — a fine trade-off vs freezing.
+    let levelTimer = 0
     const scheduleLevel = () => {
-      if (levelRaf) return
-      levelRaf = requestAnimationFrame(() => {
-        levelRaf = 0
+      if (levelTimer) return
+      levelTimer = setTimeout(() => {
+        levelTimer = 0
         refreshLevel()
-      })
+      }, 200)
     }
     cleanups.push(() => {
-      if (levelRaf) cancelAnimationFrame(levelRaf)
+      if (levelTimer) clearTimeout(levelTimer)
     })
 
     // IMPORTANT: register listeners BEFORE create(). Crepe wires them during
@@ -429,8 +501,28 @@ export default function Editor({
           setCtxMenu({ x: e.clientX, y: e.clientY })
         }
 
+        // Reflect whether the selection is highlighted onto every injected
+        // highlight toolbar button (so it shows an active state, like bold does).
+        const updateHighlightActive = () => {
+          const v = viewRef.current
+          let active = false
+          if (v && v.hasFocus()) {
+            const { from, $from, empty, to } = v.state.selection
+            const type = v.state.schema.marks.highlight
+            if (type) {
+              active = empty
+                ? ($from.storedMarks || []).some((m) => m.type === type)
+                : v.state.doc.rangeHasMark(from, to, type)
+            }
+          }
+          document
+            .querySelectorAll('.milkdown-toolbar .hm-highlight-item')
+            .forEach((b) => b.classList.toggle('active', active))
+        }
+
         const onSelChange = () => {
           const v = viewRef.current
+          updateHighlightActive()
           if (!v || !v.hasFocus()) return
           reportActiveBlock()
           scheduleLevel()
@@ -450,9 +542,25 @@ export default function Editor({
           cleanups.push(() => view.dom.removeEventListener('focus', onFocus))
           const scrollEl = host.closest('.editor-scroll')
           if (scrollEl) {
-            const onScroll = () => scheduleLevel()
+            // Scrolling only moves the caret's on-screen position (the caret
+            // itself doesn't move), so the level badge needn't reflow every
+            // 200ms mid-scroll. Refresh it ONCE after scrolling settles — this
+            // drops the per-tick full-doc reflow that janked large docs (#17).
+            // (Typing / selection / mouse-hover still use the leading 200ms
+            // scheduleLevel above.)
+            let scrollLevelTimer = 0
+            const onScroll = () => {
+              if (scrollLevelTimer) clearTimeout(scrollLevelTimer)
+              scrollLevelTimer = setTimeout(() => {
+                scrollLevelTimer = 0
+                refreshLevel()
+              }, 150)
+            }
             scrollEl.addEventListener('scroll', onScroll, { passive: true })
-            cleanups.push(() => scrollEl.removeEventListener('scroll', onScroll))
+            cleanups.push(() => {
+              scrollEl.removeEventListener('scroll', onScroll)
+              if (scrollLevelTimer) clearTimeout(scrollLevelTimer)
+            })
           }
           // NOTE: no mousemove listener. The badge only needs to reposition on caret
           // move (selectionchange) and scroll; recomputing it on every pointer move
@@ -628,6 +736,20 @@ export default function Editor({
         cleanups.push(() => view.dom.removeEventListener('copy', onCopy, true))
         cleanups.push(() => view.dom.removeEventListener('paste', onPasteImage, true))
         cleanups.push(() => view.dom.removeEventListener('drop', onDropImage, true))
+        // Markdown paste (capture phase — runs before ProseMirror's handler so
+        // text/html doesn't bypass us). Parses pasted Markdown source via
+        // Milkdown's own remark pipeline. See editor-md-paste.js.
+        cleanups.push(
+          attachMdPasteHandler(view, (md) => {
+            try {
+              // parserCtx is a FUNCTION (text) => Doc (ParserState.create returns
+              // a closure). Call it directly — it runs the full remark pipeline.
+              return crepe.editor.ctx.get(parserCtx)(md)
+            } catch {
+              return null
+            }
+          })
+        )
 
         // --- Resolve relative image paths against the file's folder ---
         const baseDir = dirOf(docPath)
@@ -718,6 +840,48 @@ export default function Editor({
           toolbar.appendChild(item)
         }
 
+        // Highlight color picker (issue #14): hover the highlighter reveals
+        // yellow / red / blue swatches. Same selection-toolbar injection as the
+        // heading button, and routes to the focused editor's view.
+        const injectHighlightButton = (toolbar) => {
+          if (toolbar.querySelector('.hm-highlight-item')) return
+          const item = document.createElement('div')
+          item.className = 'toolbar-item hm-highlight-item'
+          item.setAttribute('role', 'button')
+          item.title = tRef.current('tb.highlight')
+          item.innerHTML =
+            '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 17l-1 4 4-1L19 8l-3-3z"/><path d="M14 5l3 3"/><rect x="3" y="20" width="18" height="2" rx="1" fill="currentColor" stroke="none"/></svg>'
+          const pop = document.createElement('div')
+          pop.className = 'hm-highlight-pop'
+          const inner = document.createElement('div')
+          inner.className = 'hm-highlight-pop-inner'
+          for (const color of HIGHLIGHT_COLORS) {
+            const sw = document.createElement('button')
+            sw.type = 'button'
+            sw.className = 'hm-hl-swatch hm-hl-' + color
+            sw.title = tRef.current('tb.highlightColor.' + color)
+            sw.addEventListener('mousedown', (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+            })
+            sw.addEventListener('click', (e) => {
+              e.preventDefault()
+              e.stopPropagation()
+              const target =
+                [...liveEditors].find((ed) => ed.getView()?.hasFocus()) ||
+                [...liveEditors].find((ed) => ed.host.contains(toolbar)) ||
+                self
+              const v = target.getView?.()
+              if (v) applyHighlightInView(v, color)
+            })
+            inner.appendChild(sw)
+          }
+          pop.appendChild(inner)
+          item.appendChild(pop)
+          item.addEventListener('mousedown', (e) => e.preventDefault()) // keep selection
+          toolbar.appendChild(item)
+        }
+
         // Inject synchronously (no requestAnimationFrame — it's throttled when
         // the window is occluded, which would skip injection). The scan is cheap
         // and injectHeadingButton early-returns once the button is present.
@@ -736,7 +900,7 @@ export default function Editor({
             tRef.current('tb.link')
           ]
           toolbar
-            .querySelectorAll('.toolbar-item:not(.hm-heading-item)')
+            .querySelectorAll('.toolbar-item:not(.hm-heading-item):not(.hm-highlight-item)')
             .forEach((btn, i) => {
               if (tips[i] && btn.title !== tips[i]) btn.title = tips[i]
             })
@@ -744,8 +908,10 @@ export default function Editor({
         const scanToolbars = () => {
           document.querySelectorAll('.milkdown-toolbar').forEach((tb) => {
             injectHeadingButton(tb)
+            injectHighlightButton(tb)
             addToolbarTitles(tb)
           })
+          updateHighlightActive()
         }
         scanToolbars()
         // The toolbar is created on selection, so we only need to re-scan when
@@ -820,7 +986,7 @@ export default function Editor({
                 '.tools-button-group, .button-group, .cm-panel, .cm-tooltip, ' +
                 '.preview-panel, .cell-handle, .line-handle, .handle, .add-button, ' +
                 '.operation, .operation-item, .drag-preview, .milkdown-block-handle, ' +
-                '.milkdown-toolbar, .image-resize-handle, .label-wrapper'
+                '.milkdown-toolbar, .image-resize-handle, .label-wrapper, .hm-frontmatter-wrap'
             )
             .forEach((el) => el.remove())
           // Mermaid: the rendered diagram lives in a `.hm-mermaid-preview` widget

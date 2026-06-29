@@ -53,19 +53,25 @@ export const isValidName = (name) => !!name && !/[\\/:*?"<>|]/.test(name) && nam
 // Does this fs error mean "a file/folder with that name already exists"?
 export const isExistsError = (e) => /eexist|already exists/i.test(e?.message || '')
 
-// A Markdown doc is "heavy" to render richly when it has a huge run of non-blank
-// lines (no blank-line paragraph breaks) — Markdown then collapses it into one
-// giant paragraph with thousands of inline line-break nodes, and ProseMirror's
-// near-quadratic handling of that freezes the main thread for many seconds. Such
-// docs open in the fast plain-text editor by default (instant); the user can opt
-// into the rich editor per-tab. (Total-size cap is a coarse extra guard.)
+// A Markdown doc is "heavy" to render richly when:
+//   ① it has a huge run of non-blank lines (no paragraph breaks) → ProseMirror
+//     near-quadratic freeze;
+//   ② total chars > 400 K;
+//   ③ total lines > 50 K → even with normal blank-line breaks, the sheer number
+//     of nodes (50 K+ paragraphs) makes the full parse + DOM render block the
+//     main thread for many seconds.
+// Such docs open in the fast plain-text editor by default (instant); the user
+// can opt into the rich editor per-tab.
 const HEAVY_MAX_BLOCK_LINES = 150
 const HEAVY_MAX_TOTAL = 400000
+const HEAVY_MAX_LINES = 50000
 export function isHeavyDoc(content) {
   if (!content) return false
   if (content.length > HEAVY_MAX_TOTAL) return true
   let run = 0
+  let lines = 0
   for (const line of content.split('\n')) {
+    if (++lines > HEAVY_MAX_LINES) return true // ← P0-1: line-count guard
     if (/^[ \t]*$/.test(line)) {
       run = 0
     } else if (++run > HEAVY_MAX_BLOCK_LINES) {

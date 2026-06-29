@@ -51,6 +51,28 @@ export const ZOOM_PRESETS = [
   { id: 'z150', zoom: 1.5 }
 ]
 
+// Editor body line-height (unitless). Default matches the built-in stylesheet.
+export const LINE_HEIGHT_MIN = 1.4
+export const LINE_HEIGHT_MAX = 2.4
+export const DEFAULT_LINE_HEIGHT = 1.85
+export const LINE_HEIGHT_PRESETS = [
+  { id: 'compact', value: 1.6 },
+  { id: 'standard', value: 1.85 },
+  { id: 'relaxed', value: 2.0 },
+  { id: 'loose', value: 2.2 }
+]
+
+// Space between paragraphs (em). 0 = paragraphs sit flush.
+export const PARA_SPACING_MIN = 0
+export const PARA_SPACING_MAX = 2
+export const DEFAULT_PARA_SPACING = 0.8
+export const PARA_SPACING_PRESETS = [
+  { id: 'tight', value: 0.4 },
+  { id: 'standard', value: 0.8 },
+  { id: 'relaxed', value: 1.2 },
+  { id: 'loose', value: 1.6 }
+]
+
 // New installs default to full width (the editor fills the pane). Existing users
 // keep whatever they saved. DEFAULT_PAGE_WIDTH stays the numeric slider fallback.
 export const DEFAULT_PAGE_WIDTH_PREF = 'full'
@@ -58,7 +80,19 @@ export const DEFAULT_PAGE_WIDTH_PREF = 'full'
 export const DEFAULT_SETTINGS = {
   pageWidth: DEFAULT_PAGE_WIDTH_PREF,
   fontSize: DEFAULT_FONT_SIZE,
-  zoom: DEFAULT_ZOOM
+  zoom: DEFAULT_ZOOM,
+  lineHeight: DEFAULT_LINE_HEIGHT,
+  paragraphSpacing: DEFAULT_PARA_SPACING
+}
+
+const round1 = (n) => Math.round(n * 10) / 10
+
+// Clamp a numeric value into [min, max], rounded to 1 decimal; falls back to def
+// on a non-finite input. Shared by the line-height / paragraph-spacing prefs.
+function normalizeInRange(v, min, max, def) {
+  const n = Number(v)
+  if (!Number.isFinite(n)) return def
+  return Math.min(max, Math.max(min, round1(n)))
 }
 
 function normalizeWidth(w) {
@@ -88,7 +122,14 @@ export function loadSettings() {
     return {
       pageWidth: normalizeWidth(raw.pageWidth ?? DEFAULT_PAGE_WIDTH_PREF),
       fontSize: normalizeFontSize(raw.fontSize ?? DEFAULT_FONT_SIZE),
-      zoom: normalizeZoom(raw.zoom ?? DEFAULT_ZOOM)
+      zoom: normalizeZoom(raw.zoom ?? DEFAULT_ZOOM),
+      lineHeight: normalizeInRange(raw.lineHeight, LINE_HEIGHT_MIN, LINE_HEIGHT_MAX, DEFAULT_LINE_HEIGHT),
+      paragraphSpacing: normalizeInRange(
+        raw.paragraphSpacing,
+        PARA_SPACING_MIN,
+        PARA_SPACING_MAX,
+        DEFAULT_PARA_SPACING
+      )
     }
   } catch {
     return { ...DEFAULT_SETTINGS }
@@ -132,4 +173,24 @@ export function applyFontSize(size) {
 // so the whole document magnifies while the app chrome keeps its own sizes.
 export function applyZoom(zoom) {
   document.documentElement.style.setProperty('--editor-zoom', String(normalizeZoom(zoom)))
+}
+
+// Body line-height (unitless) and paragraph top/bottom spacing (em), exposed as
+// CSS variables the editor content reads (--editor-line-height / --editor-para-spacing).
+export function applyLineHeight(value) {
+  document.documentElement.style.setProperty(
+    '--editor-line-height',
+    String(normalizeInRange(value, LINE_HEIGHT_MIN, LINE_HEIGHT_MAX, DEFAULT_LINE_HEIGHT))
+  )
+}
+
+export function applyParagraphSpacing(value) {
+  const v = normalizeInRange(value, PARA_SPACING_MIN, PARA_SPACING_MAX, DEFAULT_PARA_SPACING)
+  const root = document.documentElement.style
+  // Rich editor (.milkdown p) reads the raw em gap. Default 0.8em = unchanged.
+  root.setProperty('--editor-para-spacing', v + 'em')
+  // Keep mode scales every block's margins by this unitless factor (1 at the
+  // "standard" 0.8em preset → identical to the original look; >1 / <1 grows /
+  // shrinks the whole vertical rhythm while preserving heading hierarchy).
+  root.setProperty('--editor-para-scale', String(round1(v / DEFAULT_PARA_SPACING)))
 }

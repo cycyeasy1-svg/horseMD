@@ -9,6 +9,7 @@ import Sidebar from './components/Sidebar.jsx'
 import Tabs from './components/Tabs.jsx'
 import Outline from './components/Outline.jsx'
 import StatusBar from './components/StatusBar.jsx'
+import SaveFab from './components/SaveFab.jsx'
 import CommandPalette from './components/CommandPalette.jsx'
 import { Icon } from './components/icons.jsx'
 import { THEMES, DEFAULT_THEME, applyTheme } from './themes.js'
@@ -24,6 +25,8 @@ import {
   applyPageWidth,
   applyFontSize,
   applyZoom,
+  applyLineHeight,
+  applyParagraphSpacing,
   normalizeZoom,
   ZOOM_STEP,
   DEFAULT_ZOOM
@@ -320,6 +323,12 @@ export default function App() {
   useEffect(() => {
     applyZoom(settings.zoom)
   }, [settings.zoom])
+  useEffect(() => {
+    applyLineHeight(settings.lineHeight)
+  }, [settings.lineHeight])
+  useEffect(() => {
+    applyParagraphSpacing(settings.paragraphSpacing)
+  }, [settings.paragraphSpacing])
   useEffect(() => {
     saveSettings(settings)
   }, [settings])
@@ -1111,6 +1120,10 @@ export default function App() {
   // one scrolled past the top), mirroring how the file tree marks the open file.
   // Rich editor only — editorHostRef is the active pane's .editor-scroll; in
   // source mode it isn't attached, so the outline shows no active item there.
+  // On large docs the per-scroll querySelectorAll + getBoundingClientRect chain
+  // is a forced reflow that freezes the main thread → scroll "chase" (#17).
+  // Throttle to at most once per 300ms (not per frame) and skip entirely while
+  // the user is actively scrolling fast (resume on settle).
   const [activeHeading, setActiveHeading] = useState(-1)
   useEffect(() => {
     if (home || !sidebarOpen || sidebarMode !== 'outline' || sourceMode) {
@@ -1119,41 +1132,80 @@ export default function App() {
     }
     const scroller = editorHostRef.current
     if (!scroller) return
-    let scrollRaf = 0
-    let retryRaf = 0
+
+    // Reflow-free scrollspy. The previous version re-queried and called
+    // getBoundingClientRect() on EVERY heading on every throttle tick. On a
+    // large doc each call forces a full-document layout recalc, which
+    // (a) froze the main thread during scroll (#17 "chase" lag) and (b) used a
+    // leading-edge-only throttle with no trailing update — so when scrolling
+    // stopped the last compute was up to 300ms stale and the outline landed on
+    // the WRONG heading. Fix: measure each heading's content-offset ONCE (a
+    // single layout pass, rebuilt every 2s / on resize), then compare against
+    // the cheap scrollTop on scroll. No layout read per frame, so it can update
+    // every frame and always reflects the exact current position.
+    let tops = null // heading content-offsets (px from content top); stable across scroll
+    let builtAt = 0
+    let raf = 0
+    let lastIdx = -1
     let tries = 0
-    const compute = () => {
-      const hs = scroller.querySelectorAll(
+
+    const build = () => {
+      const els = scroller.querySelectorAll(
         '.ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror h4, .ProseMirror h5, .ProseMirror h6'
       )
-      if (!hs.length) {
-        // Editor may still be parsing — retry for a few frames before giving up.
-        if (tries++ < 30) retryRaf = requestAnimationFrame(compute)
+      if (!els.length) {
+        tops = null
         return
       }
-      // The active heading is the last one whose top sits at/above a line a bit
-      // below the viewport top (so the section you're reading stays highlighted).
-      const threshold = scroller.getBoundingClientRect().top + 90
+      // Read every rect in one synchronous block = ONE reflow, not N. Convert
+      // each to a content-offset (Y = rect.top − scroller.top + scrollTop); Y is
+      // invariant under scrolling, so the cache stays valid while scrolling.
+      const base = scroller.getBoundingClientRect().top
+      const top0 = scroller.scrollTop
+      tops = new Array(els.length)
+      for (let i = 0; i < els.length; i++) tops[i] = els[i].getBoundingClientRect().top - base + top0
+      builtAt = Date.now()
+    }
+    const compute = () => {
+      raf = 0
+      const now = Date.now()
+      if (!tops || now - builtAt > 2000) {
+        build()
+        if (!tops) {
+          // Editor still mounting (no headings yet) — retry briefly.
+          if (tries++ < 30) raf = requestAnimationFrame(compute)
+          return
+        }
+        tries = 0
+      }
+      // scrollTop is a cheap scroll-offset read — no layout, no reflow — so this
+      // can run every frame without freezing and lands on the exact heading.
+      const limit = scroller.scrollTop + 90
       let idx = 0
-      for (let i = 0; i < hs.length; i++) {
-        if (hs[i].getBoundingClientRect().top <= threshold) idx = i
+      for (let i = 0; i < tops.length; i++) {
+        if (tops[i] <= limit) idx = i
         else break
       }
-      setActiveHeading(idx)
+      if (idx !== lastIdx) {
+        lastIdx = idx
+        setActiveHeading(idx) // only re-render the outline when the active row actually changes
+      }
     }
-    const onScroll = () => {
-      if (scrollRaf) return
-      scrollRaf = requestAnimationFrame(() => {
-        scrollRaf = 0
-        compute()
-      })
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(compute) // coalesce to ≤ once per frame
     }
     compute()
-    scroller.addEventListener('scroll', onScroll, { passive: true })
+    scroller.addEventListener('scroll', schedule, { passive: true })
+    // Resize (and the layout-settings popover) reflow heading offsets → rebuild.
+    const invalidate = () => {
+      tops = null
+      schedule()
+    }
+    window.addEventListener('resize', invalidate, { passive: true })
     return () => {
-      if (scrollRaf) cancelAnimationFrame(scrollRaf)
-      if (retryRaf) cancelAnimationFrame(retryRaf)
-      scroller.removeEventListener('scroll', onScroll)
+      if (raf) cancelAnimationFrame(raf)
+      scroller.removeEventListener('scroll', schedule)
+      window.removeEventListener('resize', invalidate)
     }
   }, [home, sidebarOpen, sidebarMode, sourceMode, activeId])
 
@@ -2162,7 +2214,16 @@ export default function App() {
         onSetFontSize={(s) => updateSettings({ fontSize: s })}
         zoom={settings.zoom}
         onSetZoom={(z) => updateSettings({ zoom: normalizeZoom(z) })}
+        lineHeight={settings.lineHeight}
+        onSetLineHeight={(v) => updateSettings({ lineHeight: v })}
+        paragraphSpacing={settings.paragraphSpacing}
+        onSetParagraphSpacing={(v) => updateSettings({ paragraphSpacing: v })}
         filterInfo={activeTab ? keepFilters[activeTab.id] : null}
+      />
+
+      <SaveFab
+        visible={!home && !!activeTab && activeTab.content !== activeTab.savedContent}
+        onSave={() => handlers.current.save()}
       />
 
       <CommandPalette
