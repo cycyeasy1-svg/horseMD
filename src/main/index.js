@@ -8,6 +8,20 @@ import { MD_EXTS, MD_RE, isRestrictedRoot, imageNameParts } from './helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
+// Keep the app responsive when it comes back from being backgrounded — i.e. the
+// "lags for a beat after I unlock / re-focus" complaint. Chromium aggressively
+// power-saves a hidden window: it throttles background timers, lowers the
+// renderer process priority, and — the big one for lock-screen — treats a fully
+// occluded window as hidden, releasing compositor/GPU state that then has to be
+// re-acquired (a visible hitch) on the next activation. These switches turn that
+// off so re-focus is instant. Trade-off: slightly higher idle power/CPU while in
+// the background, which is fine for a foreground editing app. Must be set before
+// app is ready, so they live at module top level. See webPreferences.
+// backgroundThrottling below (the per-window twin of the timer-throttling flag).
+app.commandLine.appendSwitch('disable-background-timer-throttling')
+app.commandLine.appendSwitch('disable-renderer-backgrounding')
+app.commandLine.appendSwitch('disable-backgrounding-occluded-windows')
+
 // MD_EXTS / MD_RE (Markdown file types), isAbsolutePath, isRestrictedRoot and
 // imageNameParts are pure — they live in ./helpers.js so the unit tests can
 // import them without an Electron runtime.
@@ -183,7 +197,11 @@ function createWindow() {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
-      spellcheck: true
+      spellcheck: true,
+      // Don't throttle rendering/timers when the window is in the background —
+      // the per-window twin of the disable-background-timer-throttling switch
+      // set at module top. Keeps re-focus after idle/lock snappy.
+      backgroundThrottling: false
     }
   })
 
