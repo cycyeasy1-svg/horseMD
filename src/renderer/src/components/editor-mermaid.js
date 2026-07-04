@@ -49,11 +49,28 @@ async function getMermaid() {
 const curTheme = () => (document.body.classList.contains('dark') ? 'dark' : 'default')
 const keyFor = (theme, code) => theme + '::' + code
 
+// At most this many DISTINCT diagrams render at once. mermaid.render is largely
+// synchronous main-thread work, so a diagram-dense doc scrolled quickly could
+// otherwise stack many parses into one frame; excess renders queue FIFO (the
+// IntersectionObserver in keep mode already staggers arrivals by viewport, this
+// bounds the worst case). Same-source callers still coalesce via `pending`.
+const MAX_CONCURRENT_RENDERS = 2
+let rendersInFlight = 0
+const renderQueue = []
+function pumpRenderQueue() {
+  while (rendersInFlight < MAX_CONCURRENT_RENDERS && renderQueue.length) {
+    rendersInFlight++
+    const job = renderQueue.shift()
+    job().finally(() => {
+      rendersInFlight--
+      pumpRenderQueue()
+    })
+  }
+}
+
 // Render `code` to an SVG (async, cached), then call every onDone waiting on it.
-// Mermaid is initialize()d at most once per theme (re-initializing on every
-// render is a known way to break subsequent diagrams). The FIRST render after
-// the lazy import can race with Mermaid's init and fail — on error we retry once
-// before caching the error.
+// Registers the pending entry synchronously (so concurrent same-source callers
+// coalesce) and queues the actual render behind the concurrency gate above.
 async function ensureRender(theme, code, onDone) {
   const k = keyFor(theme, code)
   if (cacheGet(k)) {
@@ -67,6 +84,16 @@ async function ensureRender(theme, code, onDone) {
     return
   }
   pending.set(k, onDone ? [onDone] : [])
+  renderQueue.push(() => renderNow(k, theme, code, onDone))
+  pumpRenderQueue()
+}
+
+// The actual render. Mermaid is initialize()d at most once per theme
+// (re-initializing on every render is a known way to break subsequent
+// diagrams). The FIRST render after the lazy import can race with Mermaid's
+// init and fail — on error we retry once (re-entering ensureRender, i.e. the
+// retry re-queues behind the gate) before caching the error.
+async function renderNow(k, theme, code, onDone) {
   const id = 'hm-mermaid-' + ++idSeq
   let result = null
   try {
