@@ -590,6 +590,8 @@ export default function App() {
   // decide split/pane routing at event time without re-creating per render.
   const splitRef = useRef(split)
   splitRef.current = split
+  const splitIdRef = useRef(splitId)
+  splitIdRef.current = splitId
   const focusedPaneRef = useRef(focusedPane)
   focusedPaneRef.current = focusedPane
 
@@ -1029,6 +1031,54 @@ export default function App() {
       })
     )
   }, [])
+
+  // Per-tab stable handlers for the (memoized) editor panes. Inline lambdas in
+  // the editor-area map would give every mounted editor fresh props each App
+  // render — i.e. on every keystroke — defeating their memo(). Cached by tab id;
+  // everything they close over is a ref or a stable setter/callback.
+  const tabHandlersRef = useRef(new Map())
+  const getTabHandlers = (id) => {
+    let h = tabHandlersRef.current.get(id)
+    if (!h) {
+      h = {
+        onChange: (md, isInitial) => updateContent(id, md, isInitial),
+        onSourceChange: (e) => updateContent(id, e.target.value, false),
+        onReady: (api) => {
+          editorApis.current[id] = api
+        },
+        onFilterChange: (info) =>
+          setKeepFilters((m) => {
+            if (!info && !(id in m)) return m
+            return { ...m, [id]: info }
+          }),
+        onPaneFocus: () => {
+          focusedTabRef.current = id
+          if (splitRef.current) setFocusedPane(id === splitIdRef.current ? 'right' : 'left')
+        }
+      }
+      tabHandlersRef.current.set(id, h)
+    }
+    return h
+  }
+  // Drop cached handlers when their tab closes (keyed on the id list, so a
+  // content edit never touches this).
+  const tabIdsKey = tabs.map((x) => x.id).join('\n')
+  useEffect(() => {
+    const ids = new Set(tabIdsKey.split('\n').filter(Boolean))
+    for (const k of [...tabHandlersRef.current.keys()]) {
+      if (!ids.has(k)) tabHandlersRef.current.delete(k)
+    }
+  }, [tabIdsKey])
+  // Stable style objects for the memoized SourceEditorPane (left pane holds a
+  // fixed fraction while split; right pane fills the rest — see the editor map).
+  const leftPaneStyle = useMemo(
+    () => ({
+      order: 1,
+      flex: split ? `0 0 calc(${(splitRatio * 100).toFixed(2)}% - 3px)` : undefined
+    }),
+    [split, splitRatio]
+  )
+  const rightPaneStyle = useMemo(() => ({ order: 3, flex: undefined }), [])
 
   const closeTab = useCallback(
     (id) => {
@@ -2940,10 +2990,9 @@ export default function App() {
               const isFocusedPane = split && ((isRight && focusedPane === 'right') || (isLeft && focusedPane === 'left'))
               const paneClass =
                 (isRight ? ' hm-pane-right' : isLeft ? ' hm-pane-left' : '') + (isFocusedPane ? ' hm-focused' : '')
-              const onPaneFocus = () => {
-                focusedTabRef.current = tab.id
-                if (split) setFocusedPane(isRight ? 'right' : 'left')
-              }
+              // Cached per tab id — stable identities so the memoized editors
+              // skip re-rendering when an unrelated tab's content changes.
+              const h = getTabHandlers(tab.id)
               // In split view the left pane holds a fixed fraction; the right pane
               // grows to fill the rest. Outside split, panes fill the row.
               const paneFlex = split && isLeft ? `0 0 calc(${(splitRatio * 100).toFixed(2)}% - 3px)` : undefined
@@ -2965,11 +3014,11 @@ export default function App() {
                     key={tab.id}
                     textareaRef={isLeft ? sourceRef : undefined}
                     paneClass={paneClass}
-                    style={{ order, flex: paneFlex }}
+                    style={isRight ? rightPaneStyle : leftPaneStyle}
                     value={tab.content}
-                    onChange={(e) => updateContent(tab.id, e.target.value, false)}
-                    onPaneFocus={onPaneFocus}
-                    onPaneMouseDown={onPaneFocus}
+                    onChange={h.onSourceChange}
+                    onPaneFocus={h.onPaneFocus}
+                    onPaneMouseDown={h.onPaneFocus}
                   />
                 )
               }
@@ -2986,23 +3035,16 @@ export default function App() {
                     key={`keep:${tab.id}:${tab.reloadNonce}`}
                     className={`editor-scroll km-scroll${paneClass}`}
                     style={{ display: inView ? undefined : 'none', order, flex: paneFlex }}
-                    onFocusCapture={onPaneFocus}
-                    onMouseDownCapture={onPaneFocus}
+                    onFocusCapture={h.onPaneFocus}
+                    onMouseDownCapture={h.onPaneFocus}
                   >
                     <KeepEditor
                       inView={inView}
                       initialContent={tab.content}
                       docPath={tab.path}
-                      onChange={(md, isInitial) => updateContent(tab.id, md, isInitial)}
-                      onReady={(api) => {
-                        editorApis.current[tab.id] = api
-                      }}
-                      onFilterChange={(info) =>
-                        setKeepFilters((m) => {
-                          if (!info && !(tab.id in m)) return m
-                          return { ...m, [tab.id]: info }
-                        })
-                      }
+                      onChange={h.onChange}
+                      onReady={h.onReady}
+                      onFilterChange={h.onFilterChange}
                       onOpenSource={openSourceAtLine}
                       onOpenDocLink={openDocLink}
                     />
@@ -3022,18 +3064,16 @@ export default function App() {
                   className={`editor-scroll${paneClass}`}
                   ref={isLeft && !sourceMode ? editorHostRef : undefined}
                   style={{ display: inView ? undefined : 'none', order, flex: paneFlex }}
-                  onFocusCapture={onPaneFocus}
-                  onMouseDownCapture={onPaneFocus}
+                  onFocusCapture={h.onPaneFocus}
+                  onMouseDownCapture={h.onPaneFocus}
                 >
                   <Suspense fallback={null}>
                     <Editor
                       tabId={`${tab.id}:${tab.reloadNonce}`}
                       initialContent={tab.content}
                       docPath={tab.path}
-                      onChange={(md, isInitial) => updateContent(tab.id, md, isInitial)}
-                      onReady={(api) => {
-                        editorApis.current[tab.id] = api
-                      }}
+                      onChange={h.onChange}
+                      onReady={h.onReady}
                     />
                   </Suspense>
                 </div>

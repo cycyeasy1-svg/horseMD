@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { memo, useEffect, useRef, useState } from 'react'
 import { flushSync } from 'react-dom'
 import { Crepe, CrepeFeature } from '@milkdown/crepe'
 import {
@@ -92,7 +92,7 @@ function applyImageText(ctx, tt) {
  *   - Status bar:      always-visible switcher (wired from App via onReady)
  *   - Plus Crepe's built-in slash menu (`/`) and block handle.
  */
-export default function Editor({
+function Editor({
   initialContent,
   docPath,
   onChange,
@@ -1210,3 +1210,9 @@ export default function Editor({
     </>
   )
 }
+
+// Memoized (shallow): hidden-but-mounted Milkdown tabs skip re-rendering while
+// another tab's content changes. The active tab still re-renders per keystroke
+// (initialContent prop changes) — its render body is cheap; the heavy work all
+// lives in mount-once effects.
+export default memo(Editor)

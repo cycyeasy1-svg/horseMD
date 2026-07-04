@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { memo, useEffect, useRef } from 'react'
 import { useI18n } from '../i18n.jsx'
 import {
   renderDoc,
@@ -44,7 +44,7 @@ const COPY_WRAP =
  *     PDF export calls getDocHTML, and setBlock is a no-op (no block model here).
  *   - Remount (key includes reloadNonce) re-reads initialContent on external edits.
  */
-export default function KeepEditor({
+function KeepEditor({
   inView = true,
   initialContent,
   docPath,
@@ -1490,3 +1490,9 @@ function escapeHtmlLocal(s) {
 function escapeAttrLocal(s) {
   return escapeHtmlLocal(s).replace(/"/g, '&quot;')
 }
+
+// Memoized: App re-renders per keystroke; with per-tab handlers cached by App,
+// a mounted-but-inactive keep tab (this is a 1400-line hook body) skips
+// entirely. Shallow compare — initialContent/docPath/inView changes must and do
+// pass through; external reloads remount via the key's reloadNonce.
+export default memo(KeepEditor)

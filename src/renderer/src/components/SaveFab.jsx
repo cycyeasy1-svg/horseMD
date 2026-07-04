@@ -2,10 +2,11 @@
 // changes, fixed at the bottom-right of the editor area — so unlike a status-bar
 // button it never shifts with the file-path length. Save is also Ctrl/Cmd+S;
 // this is the discoverable, mouse-friendly affordance.
+import { memo } from 'react'
 import { Icon } from './icons.jsx'
 import { useI18n } from '../i18n.jsx'
 
-export default function SaveFab({ visible, onSave }) {
+function SaveFab({ visible, onSave }) {
   const { t } = useI18n()
   if (!visible) return null
   return (
@@ -15,3 +16,6 @@ export default function SaveFab({ visible, onSave }) {
     </button>
   )
 }
+
+// Memoized: renders only when the dirty flag actually flips (onSave is stable).
+export default memo(SaveFab)
