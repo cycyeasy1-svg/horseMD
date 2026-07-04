@@ -44,6 +44,7 @@ src/renderer/src/
   components/{Settings,TypographyControls}.jsx  unified settings modal · shared typography adjusters
   components/SearchPanel.jsx  workspace full-text search view (streams from search:* IPC)
   components/editor-{html,images,copy,mermaid,tablebreak}.js  Editor helpers: HTML node view · img paths · rich-copy · mermaid widget · table-cell <br>
+  components/editor-{math,codeblock-eager}.js  display-math normalization ($$x$$ → block form) · eager-mount code blocks (scroll-jump fix)
   {paths,find,ui,settings,customThemes,sourceFold}.js  pure helpers: session · find · toast · prefs (page width / font size / zoom) · custom-theme injection · source-pane folding
   {blocks,themes,i18n,onboarding}.{js,jsx}
   styles/app.css       all styles + theme variables
@@ -132,7 +133,26 @@ docs/                  architecture / features / implementation-notes / developm
   `KeepEditor`, so a diagram drawn in one paints instantly in the other. A block
   holding 2+ diagrams is split into one block each by `createMermaidSplitPlugin`.
 - **Math**: enable `CrepeFeature.Latex` (off by default). Block math needs `$$` on
-  their own lines. Long display math scrolls (`.katex-display { overflow-x:auto }`).
+  their own lines — `normalizeDisplayMath` (`editor-math.js`, applied to Crepe's
+  `defaultValue`) expands a single-line `$$x^2$$` into that form, skipping code
+  fences and front matter. Long display math scrolls (`.katex-display { overflow-x:auto }`).
+- **Code blocks mount eagerly** (`editor-codeblock-eager.js`): Milkdown's
+  CodeMirrorBlock lazy-mounts via IntersectionObserver + 5s teardown; the
+  placeholder↔editor height delta made the page jump when stopping/selecting at
+  a code block (Chromium disables scroll anchoring while a contenteditable holds
+  a selection). The module patches the exported prototype to mount at construction
+  and never tear down; `.editor-scroll { overflow-anchor: auto }` absorbs the
+  remaining mid-scroll height changes (mermaid previews, images, KaTeX). Don't
+  re-add `overflow-anchor: none` and keep the side-effect import in `Editor.jsx`.
+- **CSS order: Crepe theme CSS before app.css.** `Editor.jsx` is a lazy chunk, so
+  its Crepe CSS imports would inject at runtime AFTER `app.css` and win every
+  equal-specificity conflict — Crepe's reset hardcodes `.ProseMirror p/h1–h6`
+  font sizes, which silently broke the font-size slider and the app's own heading
+  scale for rich tabs. `main.jsx` therefore imports the three Crepe theme CSS
+  files **before** `./styles/app.css` (Vite dedupes them out of the Editor
+  chunk); `.milkdown .ProseMirror p` in app.css also sets `font-size` explicitly.
+  Keep that import order, and if app.css typography stops applying in rich mode,
+  check injection order first.
 - **Table-cell line breaks** (`editor-tablebreak.js`): GFM cells are single-line,
   so a break must round-trip as `<br>`. A keymap inserts a hardbreak; a custom
   remark stringify `break` handler emits `<br>` **only inside `tableCell`** (else
@@ -202,7 +222,7 @@ docs/                  architecture / features / implementation-notes / developm
   `npm run test:watch`). Tests live in `test/`; config is `vitest.config.mjs`.
   They're written as **characterization tests** (lock current behavior, since
   there's no design spec) over `keep-parser`, `paths`, `editor-images`,
-  `main/helpers`, `settings`, `find`, `blocks`, `sourceFold`. Default env is `node`; a test
+  `main/helpers`, `settings`, `find`, `blocks`, `sourceFold`, `editor-math`. Default env is `node`; a test
   needing `localStorage`/`document` opts into happy-dom via a
   `// @vitest-environment happy-dom` first line. **Main-process pure functions
   live in `src/main/helpers.js`** (not `index.js`, which imports `electron` and
