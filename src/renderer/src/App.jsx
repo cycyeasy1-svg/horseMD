@@ -1717,6 +1717,14 @@ export default function App() {
     (v) => updateSettings({ paragraphSpacing: v }),
     [updateSettings]
   )
+  const onPaletteClose = useCallback(() => setPaletteOpen(false), [])
+  const onPaletteOpenFile = useCallback(
+    (p) => {
+      openPaths([p])
+      if (isMobile) setSidebarOpen(false)
+    },
+    [openPaths, isMobile]
+  )
 
   useEffect(() => {
     const offMenu = window.api.onMenu((cmd) => handlers.current[cmd]?.())
@@ -3094,10 +3102,10 @@ export default function App() {
 
       <CommandPalette
         open={paletteOpen}
-        onClose={() => setPaletteOpen(false)}
+        onClose={onPaletteClose}
         commands={commands}
         files={files}
-        onOpenFile={(p) => { openPaths([p]); if (isMobile) setSidebarOpen(false) }}
+        onOpenFile={onPaletteOpenFile}
       />
 
       {toast && (

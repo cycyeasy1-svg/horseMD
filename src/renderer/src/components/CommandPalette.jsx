@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import { useI18n } from '../i18n.jsx'
 
@@ -15,7 +15,9 @@ function score(query, text) {
   return qi === q.length ? 1 : 0
 }
 
-export default function CommandPalette({ open, onClose, commands, files, onOpenFile }) {
+const EMPTY_ITEMS = []
+
+function CommandPalette({ open, onClose, commands, files, onOpenFile }) {
   const { t } = useI18n()
   const [query, setQuery] = useState('')
   // The input stays bound to `query` (instant), but the expensive scoring/sort
@@ -38,6 +40,9 @@ export default function CommandPalette({ open, onClose, commands, files, onOpenF
   }, [open])
 
   const items = useMemo(() => {
+    // Hooks run even while the palette is closed (the early return below comes
+    // after them) — skip the whole-file-index mapping until it's actually open.
+    if (!open) return EMPTY_ITEMS
     const cmdItems = commands.map((c) => ({ kind: 'cmd', ...c }))
     const fileItems = files.map((f) => ({
       kind: 'file',
@@ -54,7 +59,7 @@ export default function CommandPalette({ open, onClose, commands, files, onOpenF
       .sort((a, b) => b.s - a.s)
       .slice(0, 50)
       .map((x) => x.it)
-  }, [deferredQuery, commands, files, onOpenFile])
+  }, [open, deferredQuery, commands, files, onOpenFile])
 
   useEffect(() => {
     if (sel >= items.length) setSel(Math.max(0, items.length - 1))
@@ -115,3 +120,7 @@ export default function CommandPalette({ open, onClose, commands, files, onOpenF
     </div>
   )
 }
+
+// Memoized: with App passing stable onClose/onOpenFile, a closed palette does
+// zero work while the rest of the app re-renders on every keystroke.
+export default memo(CommandPalette)
