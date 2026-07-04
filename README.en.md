@@ -34,6 +34,9 @@ interface speaks both **English and 中文**.
 - **Plain-text files (`.txt`) open in a fast plain editor** — no markdown reflow, instant on huge files
 - Rich-text copy with inline styles (paste into WeChat / email / Notion keeps formatting)
 - **Export to PDF** (`Ctrl/Cmd+Shift+E`) — clean print layout, no editor chrome
+- **Export to HTML** (`Ctrl/Cmd+Shift+H`) — a self-contained single file (local images inlined) that survives mailing / moving
+- **System print** (`Ctrl/Cmd+Alt+P`) — the same clean layout straight to the native print dialog
+- **Spellcheck** (opt-in, off by default) — toggle in Settings; right-click for suggestions / add to dictionary
 - Relative-path images resolve against the file's folder (display only — your file stays untouched)
 - **Double-click an image to view it enlarged** in a lightbox (Esc / click to close)
 - **Raw HTML tables** (`<table>…</table>` in the Markdown) render as real tables, like Typora — display only, the source is preserved
@@ -41,7 +44,7 @@ interface speaks both **English and 中文**.
 
 **Beyond Typora**
 
-- **Tabs** — many files in one window (`Ctrl/Cmd+Tab` to cycle); a `+` in the top bar for a new doc; right-click a tab to copy its path / name, reveal it in Finder/Explorer, or close others
+- **Tabs** — many files in one window (`Ctrl/Cmd+Tab` to cycle); a `+` in the top bar for a new doc; **drag to reorder, right-click to pin** (pinned tabs sit left, survive "Close Others" and restarts); right-click a tab to copy its path / name, reveal it in Finder/Explorer, or close others
 - **Split view** — two documents side by side, both editable (right-click a tab → "Open in Split", or the split button in the top bar; close with the ✕ on the right pane)
 - **Adjustable editor width** — status-bar presets (Narrow/Medium/Wide/Full) + a fine-tune slider
 - **Custom themes** — drop a `.css` into the themes folder; **Typora themes work directly**
@@ -49,12 +52,17 @@ interface speaks both **English and 中文**.
 - **Folder workspace** — a file tree with create / rename / duplicate / delete / reveal / export-PDF, plus **drag-and-drop to move** and expand-all / collapse-all
 - **Open in the same window** — double-clicking a file in Finder/Explorer adds a tab; "Open with EasyMarkdown" on a folder opens it as a workspace
 - **Command palette** (`Ctrl/Cmd+P`) — fuzzy-jump to any file or command
-- **Find in file** (`Ctrl/Cmd+F`) — highlights matches in the document with a live count
+- **Find & replace in file** (`Ctrl/Cmd+F` / `Ctrl+H`, macOS `⌥⌘F` for replace) — live match highlighting and count, replace one / replace all (case / whole-word / regex apply too)
 - **Outline panel** (`Ctrl+Shift+L`) — click a heading to jump
 - Live word / character count & reading time
 - Session restore — reopens your folder and tabs
 - Auto-refreshing file tree & open files — watches for external changes
 - **Home button** in the activity bar — back to the welcome page anytime (open tabs stay loaded)
+- **Unified Settings** (`Ctrl/Cmd+,`, status-bar gear, or command palette) — typography, appearance, language and editing preferences in one place
+- **Autosave** (opt-in, off by default) — saved files write to disk ~2 s after you stop typing; never clobbers an unresolved external edit
+- **Choosable default editor** — new Markdown tabs open in keep mode or WYSIWYG, your pick in Settings
+- **Manageable recent files** — pin to top, remove one, or clear the list on the welcome page
+- **Localized application menu** — the native menu follows the UI language (EN / 中文 / 日本語)
 - **Loading skeleton** for large documents, so opening a big file isn't a blank pause
 - Unsaved-changes warning when closing the window or quitting (not just closing a tab)
 - Notify-only update check — tells you when a new release is out **and shows what changed** (no auto-download)
@@ -83,9 +91,13 @@ switchable with `Ctrl+Shift+T` or the status-bar picker.
 | Open folder        | `Ctrl/Cmd+Shift+O`            |
 | Save / Save As     | `Ctrl/Cmd+S` / `…+Shift+S`    |
 | Export as PDF      | `Ctrl/Cmd+Shift+E`            |
+| Export as HTML     | `Ctrl/Cmd+Shift+H`            |
+| Print              | `Ctrl/Cmd+Alt+P`              |
+| Settings           | `Ctrl/Cmd+,`                  |
 | Close tab          | `Ctrl/Cmd+W`                  |
 | Command palette    | `Ctrl/Cmd+P`                  |
 | Find in file       | `Ctrl/Cmd+F`                  |
+| Find & replace     | `Ctrl+H` (macOS `⌥⌘F`)        |
 | Toggle sidebar     | `Ctrl/Cmd+B`                  |
 | Toggle outline     | `Ctrl+Shift+L`                |
 | Toggle source mode | `Ctrl/Cmd+/`                  |
