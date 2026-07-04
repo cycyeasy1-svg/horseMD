@@ -42,6 +42,7 @@ src/renderer/src/
   components/{Sidebar,Tabs,Outline,CommandPalette,StatusBar,icons}.jsx
   components/{Welcome,WindowControls,UpdateToast,RenameModal}.jsx  leaf views split out of App
   components/{Settings,TypographyControls}.jsx  unified settings modal · shared typography adjusters
+  components/SearchPanel.jsx  workspace full-text search view (streams from search:* IPC)
   components/editor-{html,images,copy,mermaid,tablebreak}.js  Editor helpers: HTML node view · img paths · rich-copy · mermaid widget · table-cell <br>
   {paths,find,ui,settings,customThemes,sourceFold}.js  pure helpers: session · find · toast · prefs (page width / font size / zoom) · custom-theme injection · source-pane folding
   {blocks,themes,i18n,onboarding}.{js,jsx}

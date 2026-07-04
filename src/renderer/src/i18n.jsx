@@ -233,6 +233,17 @@ export const STRINGS = {
     'settings.spellcheckDesc': 'Underline misspelled words; right-click for suggestions.',
     'cmd.settings': 'Open Settings',
 
+    // workspace full-text search
+    'search.title': 'Search in Workspace',
+    'search.placeholder': 'Search across files…',
+    'search.searching': 'Searching… {n} hits',
+    'search.results': '{n} hits in {m} files',
+    'search.truncated': 'Showing the first {n} hits — narrow the search',
+    'search.noResults': 'No results',
+    'search.noWorkspace': 'Open a folder to search across its files.',
+    'search.gotoLine': 'Go to line {n}',
+    'cmd.searchWorkspace': 'Search in Workspace',
+
     // mermaid live preview
     'mermaid.rendering': 'Rendering diagram…',
     'mermaid.empty': 'Empty mermaid block',
@@ -540,6 +551,17 @@ export const STRINGS = {
     'settings.spellcheck': '拼写检查',
     'settings.spellcheckDesc': '为拼写错误的单词加下划线，右键查看建议。',
     'cmd.settings': '打开设置',
+
+    // workspace full-text search
+    'search.title': '在工作区中搜索',
+    'search.placeholder': '跨文件搜索…',
+    'search.searching': '搜索中… 已找到 {n} 处',
+    'search.results': '在 {m} 个文件中找到 {n} 处',
+    'search.truncated': '仅显示前 {n} 处结果 —— 请缩小搜索范围',
+    'search.noResults': '没有找到结果',
+    'search.noWorkspace': '先打开一个文件夹，才能跨文件搜索。',
+    'search.gotoLine': '跳到第 {n} 行',
+    'cmd.searchWorkspace': '在工作区中搜索',
 
     // mermaid 实时预览
     'mermaid.rendering': '正在渲染图表…',
@@ -851,6 +873,17 @@ export const STRINGS = {
     'settings.spellcheck': 'スペルチェック',
     'settings.spellcheckDesc': 'スペルミスの単語に下線を表示し、右クリックで候補を表示します。',
     'cmd.settings': '設定を開く',
+
+    // workspace full-text search
+    'search.title': 'ワークスペース内を検索',
+    'search.placeholder': 'ファイル横断検索…',
+    'search.searching': '検索中… {n} 件',
+    'search.results': '{m} ファイルで {n} 件',
+    'search.truncated': '先頭 {n} 件のみ表示 — 検索条件を絞ってください',
+    'search.noResults': '結果がありません',
+    'search.noWorkspace': 'フォルダーを開くとファイル横断検索ができます。',
+    'search.gotoLine': '{n} 行目へ移動',
+    'cmd.searchWorkspace': 'ワークスペース内を検索',
 
     // mermaid live preview
     'mermaid.rendering': '図を描画中…',

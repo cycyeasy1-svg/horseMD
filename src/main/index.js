@@ -4,7 +4,7 @@ import { dirname, join, basename, extname, resolve, sep } from 'node:path'
 import fs from 'node:fs/promises'
 import { existsSync, statSync, constants as fsConstants } from 'node:fs'
 import chokidar from 'chokidar'
-import { MD_EXTS, MD_RE, isRestrictedRoot, imageNameParts } from './helpers.js'
+import { MD_EXTS, MD_RE, isRestrictedRoot, imageNameParts, searchContentLines } from './helpers.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
@@ -427,6 +427,92 @@ ipcMain.handle('export:html', async (_e, { html, defaultName, title }) => {
   await fs.writeFile(res.filePath, doc, 'utf8')
   shell.openPath(res.filePath)
   return { path: res.filePath }
+})
+
+// ── Workspace full-text search ──
+// Streaming: search:start returns an id immediately, then per-file result
+// batches arrive on 'search:batch' and a final 'search:done' — the UI shows
+// hits as they're found instead of blocking on the whole workspace. Guards:
+// only absolute non-restricted roots, IGNORED_DIRS/dot-dirs skipped, files
+// > 1 MB skipped, ≤ 50 hits per file, ≤ 500 total (then truncated), depth ≤ 12.
+// A new search (or search:cancel) bumps the token; the running walk sees the
+// stale token and stops silently.
+let searchGeneration = 0
+const SEARCH_MAX_TOTAL = 500
+const SEARCH_MAX_PER_FILE = 50
+const SEARCH_MAX_FILE_BYTES = 1024 * 1024
+const SEARCH_MAX_DEPTH = 12
+
+async function runWorkspaceSearch(id, roots, query, options) {
+  let total = 0
+  let filesScanned = 0
+  let truncated = false
+  const stale = () => id !== searchGeneration
+
+  const walk = async (dir, depth) => {
+    if (stale() || truncated || depth > SEARCH_MAX_DEPTH) return
+    let entries
+    try {
+      entries = await fs.readdir(dir, { withFileTypes: true })
+    } catch {
+      return
+    }
+    for (const e of entries) {
+      if (stale() || truncated) return
+      if (e.name.startsWith('.')) continue
+      const p = join(dir, e.name)
+      if (e.isDirectory()) {
+        if (IGNORED_DIRS.has(e.name)) continue
+        await walk(p, depth + 1)
+      } else if (e.isFile() && MD_RE.test(e.name)) {
+        try {
+          const st = await fs.stat(p)
+          if (st.size > SEARCH_MAX_FILE_BYTES) continue
+          const content = await fs.readFile(p, 'utf8')
+          if (stale()) return
+          filesScanned++
+          const { matches } = searchContentLines(content, query, options, SEARCH_MAX_PER_FILE)
+          if (!matches.length) continue
+          let items = matches
+          if (total + items.length >= SEARCH_MAX_TOTAL) {
+            items = items.slice(0, SEARCH_MAX_TOTAL - total)
+            truncated = true
+          }
+          total += items.length
+          if (items.length) sendToRenderer('search:batch', { id, path: p, items })
+        } catch {
+          /* unreadable file — skip */
+        }
+      }
+    }
+  }
+
+  for (const root of roots) {
+    if (stale() || truncated) break
+    if (typeof root !== 'string' || isRestrictedRoot(root)) continue
+    await walk(root, 0)
+  }
+  if (!stale()) sendToRenderer('search:done', { id, total, filesScanned, truncated })
+}
+
+ipcMain.handle('search:start', (_e, { roots, query, options }) => {
+  const id = ++searchGeneration
+  const q = String(query ?? '')
+  if (!q.trim()) return { id, error: '' }
+  // Validate a regex up front so the UI can flag it without waiting for a walk.
+  if (options?.regex) {
+    try {
+      new RegExp(q)
+    } catch {
+      return { id, error: 'regex' }
+    }
+  }
+  runWorkspaceSearch(id, Array.isArray(roots) ? roots : [], q, options || {})
+  return { id, error: '' }
+})
+
+ipcMain.handle('search:cancel', () => {
+  searchGeneration++
 })
 
 // Print the current document via the system print dialog. Same hidden-window
@@ -955,6 +1041,7 @@ const MENU_STRINGS = {
     replace: 'Replace',
     view: 'View',
     palette: 'Command Palette',
+    searchWorkspace: 'Search in Workspace',
     toggleSidebar: 'Toggle Sidebar',
     toggleOutline: 'Toggle Outline',
     toggleSource: 'Toggle Source Mode',
@@ -989,6 +1076,7 @@ const MENU_STRINGS = {
     replace: '替换',
     view: '视图',
     palette: '命令面板',
+    searchWorkspace: '在工作区中搜索',
     toggleSidebar: '切换侧边栏',
     toggleOutline: '切换大纲',
     toggleSource: '切换源码模式',
@@ -1026,6 +1114,7 @@ const MENU_STRINGS = {
     replace: '置換',
     view: '表示',
     palette: 'コマンドパレット',
+    searchWorkspace: 'ワークスペース内を検索',
     toggleSidebar: 'サイドバーの切替',
     toggleOutline: 'アウトラインの切替',
     toggleSource: 'ソースモードの切替',
@@ -1097,6 +1186,7 @@ function buildMenu() {
       label: L.view,
       submenu: [
         { label: L.palette, accelerator: 'CmdOrCtrl+P', click: menuCmd('palette') },
+        { label: L.searchWorkspace, accelerator: 'CmdOrCtrl+Shift+F', click: menuCmd('searchWorkspace') },
         // Sidebar toggle is handled in the renderer (capture phase) so it wins
         // over the editor's Ctrl/Cmd+B "bold" binding instead of conflicting.
         { label: L.toggleSidebar, click: menuCmd('toggleSidebar') },

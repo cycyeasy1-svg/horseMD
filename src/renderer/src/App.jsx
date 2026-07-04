@@ -20,6 +20,7 @@ import WindowControls from './components/WindowControls.jsx'
 import UpdateToast from './components/UpdateToast.jsx'
 import RenameModal from './components/RenameModal.jsx'
 import Settings from './components/Settings.jsx'
+import SearchPanel from './components/SearchPanel.jsx'
 import {
   loadSettings,
   saveSettings,
@@ -387,6 +388,9 @@ export default function App() {
   const [paletteOpen, setPaletteOpen] = useState(false)
   // Unified settings modal (status-bar gear / command palette / File menu).
   const [settingsOpen, setSettingsOpen] = useState(false)
+  // Bumped each time workspace search is invoked so an already-open panel
+  // re-focuses its input (Ctrl+Shift+F while the panel is showing).
+  const [searchFocusNonce, setSearchFocusNonce] = useState(0)
   // "Home" shows the welcome/landing page while keeping open tabs mounted (so
   // returning to a document doesn't re-create its editor). Cleared whenever a
   // tab is activated or a file is opened.
@@ -1827,6 +1831,11 @@ export default function App() {
       setSidebarMode('files')
       setSidebarOpen(true)
     },
+    searchWorkspace: () => {
+      setSidebarMode('search')
+      setSidebarOpen(true)
+      setSearchFocusNonce((n) => n + 1)
+    },
     toggleSource,
     toggleEditorMode,
     toggleTheme: cycleTheme,
@@ -2215,6 +2224,7 @@ export default function App() {
         { id: 'cmd.theme', title: t('cmd.theme'), icon: 'moon', run: () => handlers.current.toggleTheme() },
         { id: 'cmd.find', title: t('cmd.find'), icon: 'search', run: () => handlers.current.find() },
         { id: 'cmd.replace', title: t('cmd.replace'), icon: 'search', run: () => handlers.current.replace() },
+        caps.workspaceSearch && { id: 'cmd.searchWorkspace', title: t('cmd.searchWorkspace'), icon: 'search', run: () => handlers.current.searchWorkspace() },
         caps.spellcheck && {
           id: 'cmd.spell',
           title: t(settings.spellcheck ? 'cmd.spellOff' : 'cmd.spellOn'),
@@ -2766,21 +2776,17 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [find.open, stepLine, stepTextFind])
 
-  // Reveal an anchor (heading slug / explicit id / literal text) in a doc. The
-  // target may have just opened, so we retry until its block/textarea is mounted.
-  const jumpToAnchor = useCallback((anchor, targetPath) => {
-    const norm = (p) => (p || '').replace(/\\/g, '/')
-    const tab = targetPath
-      ? tabsRef.current.find((t) => norm(t.path) === norm(targetPath))
-      : tabsRef.current.find((t) => t.id === activeIdRef.current)
-    const content = tab?.content ?? ''
-    const line = findAnchorLine(content, anchor) // 1-based, 0 if not found
-    if (!line) return
+  // Reveal a 1-based source line in a tab's visible editor, retrying until the
+  // editor is mounted/rendered. `waitActive` also waits for the tab to become
+  // the active one first (used when the jump follows an openPaths), so we don't
+  // flash a block in the previously-shown doc before React commits the switch.
+  // Content is re-read from the live tab on every attempt — a lazily-restored
+  // placeholder may still be filling when the first attempt fires.
+  const jumpToTabLine = useCallback((tabId, line, waitActive = false) => {
+    if (!tabId || !line) return
     let tries = 0
     const attempt = () => {
-      // Wait until the target tab is the active/visible one, so we don't flash a
-      // block in the previously-shown doc before React commits the tab switch.
-      if (targetPath && tab && activeIdRef.current !== tab.id) {
+      if (waitActive && activeIdRef.current !== tabId) {
         if (tries++ < 16) setTimeout(attempt, 70)
         return
       }
@@ -2801,6 +2807,7 @@ export default function App() {
         el.scrollTop = Math.max(0, (ln - 1) * lh - el.clientHeight / 2)
         return
       }
+      const content = tabsRef.current.find((x) => x.id === tabId)?.content ?? ''
       const { bi } = blockIndexForLine(content, line)
       Object.values(editorApis.current).forEach((api) => api?.ensureRendered?.()) // flush keep chunks
       const root = richRoot()
@@ -2818,6 +2825,29 @@ export default function App() {
     }
     attempt()
   }, [])
+
+  // Reveal an anchor (heading slug / explicit id / literal text) in a doc.
+  const jumpToAnchor = useCallback((anchor, targetPath) => {
+    const norm = (p) => (p || '').replace(/\\/g, '/')
+    const tab = targetPath
+      ? tabsRef.current.find((t) => norm(t.path) === norm(targetPath))
+      : tabsRef.current.find((t) => t.id === activeIdRef.current)
+    const content = tab?.content ?? ''
+    const line = findAnchorLine(content, anchor) // 1-based, 0 if not found
+    if (!line || !tab) return
+    jumpToTabLine(tab.id, line, !!targetPath)
+  }, [jumpToTabLine])
+
+  // Workspace search: open (or focus) the file, then jump to the hit's line.
+  const openSearchResult = useCallback(
+    async (path, line) => {
+      await openPaths([path])
+      const norm = (p) => (p || '').replace(/\\/g, '/')
+      const tab = tabsRef.current.find((t) => norm(t.path) === norm(path))
+      if (tab) jumpToTabLine(tab.id, line, true)
+    },
+    [openPaths, jumpToTabLine]
+  )
 
   // ── in-app document links ──
   // A keep-mode link like [POL-001](L2_xxx.md#POL-001) opens the target doc as a
@@ -2930,6 +2960,15 @@ export default function App() {
         >
           <Icon name="folder" size={20} />
         </button>
+        {window.api.capabilities?.workspaceSearch && (
+          <button
+            className={`activity-item${sidebarMode === 'search' ? ' active' : ''}`}
+            title={t('search.title')}
+            onClick={() => handlers.current.searchWorkspace()}
+          >
+            <Icon name="search" size={20} />
+          </button>
+        )}
         <button
           className={`activity-item${sidebarMode === 'outline' ? ' active' : ''}`}
           title={t('outline.title')}
@@ -3019,6 +3058,13 @@ export default function App() {
                 onRemoveFolder={removeWorkspace}
                 onReorderFolder={reorderWorkspaces}
                 refreshNonce={refreshNonce}
+              />
+            ) : sidebarMode === 'search' ? (
+              <SearchPanel
+                workspaces={workspaces}
+                onOpenResult={openSearchResult}
+                onAddFolder={openFolder}
+                focusNonce={searchFocusNonce}
               />
             ) : (
               <Outline content={activeTab?.content || ''} activeIndex={activeHeading} onJump={jumpToHeading} />

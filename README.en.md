@@ -52,6 +52,7 @@ interface speaks both **English and 中文**.
 - **Folder workspace** — a file tree with create / rename / duplicate / delete / reveal / export-PDF, plus **drag-and-drop to move** and expand-all / collapse-all
 - **Open in the same window** — double-clicking a file in Finder/Explorer adds a tab; "Open with EasyMarkdown" on a folder opens it as a workspace
 - **Command palette** (`Ctrl/Cmd+P`) — fuzzy-jump to any file or command
+- **Workspace full-text search** (`Ctrl/Cmd+Shift+F`) — search across files with per-file grouping, highlighted hits streaming in as they're found; click to jump to the exact line (case / whole-word / regex)
 - **Find & replace in file** (`Ctrl/Cmd+F` / `Ctrl+H`, macOS `⌥⌘F` for replace) — live match highlighting and count, replace one / replace all (case / whole-word / regex apply too)
 - **Outline panel** (`Ctrl+Shift+L`) — click a heading to jump
 - Live word / character count & reading time
@@ -98,6 +99,7 @@ switchable with `Ctrl+Shift+T` or the status-bar picker.
 | Command palette    | `Ctrl/Cmd+P`                  |
 | Find in file       | `Ctrl/Cmd+F`                  |
 | Find & replace     | `Ctrl+H` (macOS `⌥⌘F`)        |
+| Search in workspace | `Ctrl/Cmd+Shift+F`           |
 | Toggle sidebar     | `Ctrl/Cmd+B`                  |
 | Toggle outline     | `Ctrl+Shift+L`                |
 | Toggle source mode | `Ctrl/Cmd+/`                  |

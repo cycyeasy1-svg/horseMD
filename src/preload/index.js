@@ -53,6 +53,12 @@ const api = {
   listFiles: (root) => ipcRenderer.invoke('fs:listFiles', root),
   openFolderTree: (dir) => ipcRenderer.invoke('fs:openFolderTree', dir),
 
+  // workspace full-text search (streaming: batches + done arrive as events)
+  searchStart: (payload) => ipcRenderer.invoke('search:start', payload),
+  searchCancel: () => ipcRenderer.invoke('search:cancel'),
+  onSearchBatch: on('search:batch'),
+  onSearchDone: on('search:done'),
+
   // watch
   watchStart: (dir) => ipcRenderer.invoke('watch:start', dir),
   watchStop: (dir) => ipcRenderer.invoke('watch:stop', dir),
@@ -129,6 +135,7 @@ const api = {
   // extensible") and white-screens the app. Desktop supports everything.
   capabilities: {
     folderWorkspace: true,
+    workspaceSearch: true,
     watch: true,
     windowControls: true,
     pdfExport: true,
