@@ -54,25 +54,44 @@ export const isValidName = (name) => !!name && !/[\\/:*?"<>|]/.test(name) && nam
 export const isExistsError = (e) => /eexist|already exists/i.test(e?.message || '')
 
 // A Markdown doc is "heavy" to render richly when:
-//   ① it has a huge run of non-blank lines (no paragraph breaks) → ProseMirror
-//     near-quadratic freeze;
+//   ① it has a huge run of non-blank lines OUTSIDE code fences (no paragraph
+//     breaks → one giant paragraph / table, the ProseMirror slow path);
 //   ② total chars > 400 K;
 //   ③ total lines > 50 K → even with normal blank-line breaks, the sheer number
 //     of nodes (50 K+ paragraphs) makes the full parse + DOM render block the
 //     main thread for many seconds.
 // Such docs open in the fast plain-text editor by default (instant); the user
 // can opt into the rich editor per-tab.
-const HEAVY_MAX_BLOCK_LINES = 150
+//
+// Fenced code lines don't count toward the run: a fence is ONE CodeMirror node
+// however long, and rich-mode open time measured flat (~350 ms at 300 / 900 /
+// 3000 code lines), so a long code block flagging an ordinary doc as heavy was
+// a pure false positive. The run threshold is 1000 for what remains (prose
+// runs, tables): measured ≈0.5 s for a 900-line paragraph run and ≈1.3 s for a
+// 900-row table — noticeable but nowhere near the multi-second freeze this
+// guard exists for, and rich mode is opt-in per tab anyway.
+const HEAVY_MAX_BLOCK_LINES = 1000
 const HEAVY_MAX_TOTAL = 400000
 const HEAVY_MAX_LINES = 50000
+const HEAVY_FENCE_RE = /^ {0,3}(`{3,}|~{3,})/
 export function isHeavyDoc(content) {
   if (!content) return false
   if (content.length > HEAVY_MAX_TOTAL) return true
   let run = 0
   let lines = 0
+  let fence = null // { char, len } while inside a fenced code block
   for (const line of content.split('\n')) {
     if (++lines > HEAVY_MAX_LINES) return true // ← P0-1: line-count guard
-    if (/^[ \t]*$/.test(line)) {
+    if (fence) {
+      const m = line.match(HEAVY_FENCE_RE)
+      if (m && m[1][0] === fence.char && m[1].length >= fence.len) fence = null
+      continue
+    }
+    const open = line.match(HEAVY_FENCE_RE)
+    if (open) {
+      fence = { char: open[1][0], len: open[1].length }
+      run = 0 // a fence is a block boundary
+    } else if (/^[ \t]*$/.test(line)) {
       run = 0
     } else if (++run > HEAVY_MAX_BLOCK_LINES) {
       return true

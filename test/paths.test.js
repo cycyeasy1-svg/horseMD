@@ -137,12 +137,23 @@ describe('isHeavyDoc', () => {
     expect(isHeavyDoc('')).toBe(false)
     expect(isHeavyDoc('# hi\n\nsome text')).toBe(false)
   })
-  it('is true for a long run of non-blank lines (>150)', () => {
-    expect(isHeavyDoc(Array(200).fill('x').join('\n'))).toBe(true)
+  it('is true for a long run of non-blank lines (>1000)', () => {
+    expect(isHeavyDoc(Array(1100).fill('x').join('\n'))).toBe(true)
+    // 150–1000 line runs are no longer heavy (measured ≈0.5 s at 900 lines)
+    expect(isHeavyDoc(Array(900).fill('x').join('\n'))).toBe(false)
   })
   it('a blank line resets the run', () => {
-    const chunk = (Array(100).fill('x').join('\n') + '\n\n')
+    const chunk = (Array(800).fill('x').join('\n') + '\n\n')
     expect(isHeavyDoc(chunk.repeat(3))).toBe(false)
+  })
+  it('fenced code lines do not count toward the run', () => {
+    // a single huge code block is one CodeMirror node — cheap in rich mode
+    expect(isHeavyDoc('```js\n' + Array(2000).fill('code();').join('\n') + '\n```')).toBe(false)
+    expect(isHeavyDoc('~~~\n' + Array(2000).fill('x').join('\n') + '\n~~~')).toBe(false)
+    // an unclosed fence swallows the rest of the doc (still one code node)
+    expect(isHeavyDoc('```\n' + Array(2000).fill('x').join('\n'))).toBe(false)
+    // but a >1000 prose run AFTER a closed fence is still heavy
+    expect(isHeavyDoc('```\ncode\n```\n' + Array(1100).fill('x').join('\n'))).toBe(true)
   })
   it('is true past the total-size cap', () => {
     expect(isHeavyDoc('a'.repeat(400001))).toBe(true)
