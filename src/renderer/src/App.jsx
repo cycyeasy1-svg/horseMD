@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
+import { memo, useCallback, useDeferredValue, useEffect, useLayoutEffect, useMemo, useRef, useState, lazy, Suspense } from 'react'
 // The Milkdown/Crepe rich editor pulls in the whole ProseMirror + KaTeX stack
 // (~3.6 MB). It's only used when a tab opts into WYSIWYG (`milkdownForced`); the
 // `.md` default is the lightweight source-backed KeepEditor. Loading it lazily
@@ -39,6 +39,13 @@ import {
   isNewerVersion, isAbsolutePath, sanitizeWorkspaces, baseName, dirName, joinPath,
   isPlainTextDoc, isHeavyDoc, genId, LS, loadSession, buildSessionTabs, MD_DOC_RE
 } from './paths.js'
+import {
+  countSourceLines,
+  buildLineNumberText,
+  buildSourceView,
+  computeFoldRows,
+  patchFoldedSourceLines
+} from './sourceFold.js'
 
 const ONBOARDED_KEY = 'easymarkdown.onboarded.v1'
 // One-time coach-mark explaining Keep vs Milkdown, shown on first run only.
@@ -84,125 +91,10 @@ function findAnchorLine(content, anchor) {
   return 0
 }
 
-function countSourceLines(value) {
-  let count = 1
-  for (let i = 0; i < value.length; i++) {
-    if (value.charCodeAt(i) === 10) count++
-  }
-  return count
-}
-
-function buildLineNumberText(count) {
-  const lines = new Array(Math.max(1, count))
-  for (let i = 0; i < lines.length; i++) lines[i] = String(i + 1)
-  return lines.join('\n')
-}
-
-function sourceHeadingForLine(line) {
-  const m = String(line || '').match(/^\s{0,3}(#{1,6})\s+(.*?)\s*#*\s*$/)
-  if (!m) return null
-  const text = (m[2] || '').trim()
-  if (!text) return null
-  return { level: m[1].length, text, key: `${m[1].length}:${text}` }
-}
-
-function findSourceFoldableLines(lines) {
-  const foldable = new Set()
-  const stack = []
-
-  for (let i = 0; i < lines.length; i++) {
-    const heading = sourceHeadingForLine(lines[i])
-    if (heading) {
-      while (stack.length && stack[stack.length - 1].level >= heading.level) stack.pop()
-      stack.forEach((h) => foldable.add(h.line))
-      stack.push({ level: heading.level, line: i })
-    } else {
-      stack.forEach((h) => foldable.add(h.line))
-    }
-  }
-
-  return foldable
-}
-
-function buildSourceView(lines, collapsedKeys) {
-  const visibleMap = []
-  const hiddenByLine = new Map()
-  const foldRows = []
-  const collapsedStack = []
-  const foldableLines = findSourceFoldableLines(lines)
-
-  for (let i = 0; i < lines.length; i++) {
-    const heading = sourceHeadingForLine(lines[i])
-    const foldable = heading && foldableLines.has(i)
-    if (heading) {
-      while (collapsedStack.length && collapsedStack[collapsedStack.length - 1].level >= heading.level) {
-        collapsedStack.pop()
-      }
-    }
-
-    const hiddenBy = collapsedStack.map((h) => h.key)
-    if (hiddenBy.length) {
-      hiddenByLine.set(i, hiddenBy)
-    } else {
-      const row = visibleMap.length
-      visibleMap.push(i)
-      if (foldable) {
-        foldRows.push({
-          row,
-          line: i,
-          key: heading.key,
-          collapsed: collapsedKeys.has(heading.key)
-        })
-      }
-    }
-
-    if (foldable && collapsedKeys.has(heading.key)) collapsedStack.push(heading)
-  }
-
-  return {
-    visibleMap,
-    hiddenByLine,
-    foldRows,
-    displayLines: visibleMap.map((i) => lines[i]),
-    lineNumbers: visibleMap.map((i) => String(i + 1)).join('\n') || '1'
-  }
-}
-
-function patchFoldedSourceLines(lines, oldVisibleLines, newVisibleLines, visibleMap) {
-  let prefix = 0
-  const maxPrefix = Math.min(oldVisibleLines.length, newVisibleLines.length)
-  while (prefix < maxPrefix && oldVisibleLines[prefix] === newVisibleLines[prefix]) prefix++
-
-  let oldSuffix = oldVisibleLines.length
-  let newSuffix = newVisibleLines.length
-  while (
-    oldSuffix > prefix &&
-    newSuffix > prefix &&
-    oldVisibleLines[oldSuffix - 1] === newVisibleLines[newSuffix - 1]
-  ) {
-    oldSuffix--
-    newSuffix--
-  }
-
-  if (prefix === oldVisibleLines.length && prefix === newVisibleLines.length) return lines.join('\n')
-
-  const next = lines.slice()
-  const inserted = newVisibleLines.slice(prefix, newSuffix)
-  const oldChanged = oldSuffix - prefix
-
-  if (oldChanged === 0) {
-    const prevOrig = prefix > 0 ? visibleMap[prefix - 1] : -1
-    next.splice(prevOrig + 1, 0, ...inserted)
-    return next.join('\n')
-  }
-
-  const startOrig = visibleMap[prefix] ?? lines.length
-  const endOrig = visibleMap[oldSuffix - 1] ?? startOrig
-  next.splice(startOrig, Math.max(1, endOrig - startOrig + 1), ...inserted)
-  return next.join('\n')
-}
-
-function SourceEditorPane({
+// Pure line/fold helpers live in sourceFold.js (unit-tested in
+// test/source-fold.test.js). Memoized: App passes stable per-tab handlers and
+// style objects, so a pane only re-renders when its own value/layout changes.
+const SourceEditorPane = memo(function SourceEditorPane({
   value,
   textareaRef,
   paneClass,
@@ -216,26 +108,67 @@ function SourceEditorPane({
   const foldGutterRef = useRef(null)
   const [collapsedKeys, setCollapsedKeys] = useState(() => new Set())
   const [sourceMetrics, setSourceMetrics] = useState({ lineHeight: 24, padTop: 40 })
-  const lines = useMemo(() => String(value ?? '').split('\n'), [value])
-  const sourceView = useMemo(() => buildSourceView(lines, collapsedKeys), [lines, collapsedKeys])
   const hasFolds = collapsedKeys.size > 0
-  const displayedValue = hasFolds ? sourceView.displayLines.join('\n') : value
-  const lineNumbers = hasFolds ? sourceView.lineNumbers : buildLineNumberText(countSourceLines(value || ''))
-  const visibleMap = hasFolds ? sourceView.visibleMap : lines.map((_, i) => i)
-  const visibleLines = hasFolds ? sourceView.displayLines : lines
+
+  // Two regimes, split on purpose:
+  //  - Folds active (rare): keep a fully SYNCHRONOUS view — the textarea shows a
+  //    derived value, and handleChange patches edits back through visibleMap, so
+  //    the view must never lag the keystroke (a stale patch base corrupts text).
+  //  - No folds (the normal path — where the biggest .txt/heavy docs live):
+  //    the textarea shows `value` directly and nothing needs the full view, so
+  //    the per-keystroke work drops to one zero-allocation line count; the fold
+  //    gutter is fed from a deferred scan (a beat late is fine for buttons).
+  const foldLines = useMemo(() => (hasFolds ? String(value ?? '').split('\n') : null), [hasFolds, value])
+  const foldView = useMemo(
+    () => (hasFolds ? buildSourceView(foldLines, collapsedKeys) : null),
+    [hasFolds, foldLines, collapsedKeys]
+  )
+  const deferredValue = useDeferredValue(value)
+  const prevFoldRowsRef = useRef([])
+  const idleFoldRows = useMemo(() => {
+    if (hasFolds) return null
+    const next = computeFoldRows(String(deferredValue ?? '').split('\n'))
+    // Keep the previous identity when nothing changed, so the gutter render and
+    // the measuring layout effect below skip on plain typing.
+    const prev = prevFoldRowsRef.current
+    if (prev.length === next.length && prev.every((r, i) => r.row === next[i].row && r.key === next[i].key)) {
+      return prev
+    }
+    prevFoldRowsRef.current = next
+    return next
+  }, [hasFolds, deferredValue])
+  const foldRows = hasFolds ? foldView.foldRows : idleFoldRows
+  const lineCount = useMemo(
+    () => (hasFolds ? null : countSourceLines(String(value ?? ''))),
+    [hasFolds, value]
+  )
+  const noFoldLineNumbers = useMemo(
+    () => (hasFolds ? null : buildLineNumberText(lineCount)),
+    [hasFolds, lineCount]
+  )
+  const displayedValue = hasFolds ? foldView.displayLines.join('\n') : value
+  const lineNumbers = hasFolds ? foldView.lineNumbers : noFoldLineNumbers
 
   const valueRef = useRef(value)
-  const linesRef = useRef(lines)
-  const sourceViewRef = useRef(sourceView)
+  const hasFoldsRef = useRef(hasFolds)
+  const foldLinesRef = useRef(foldLines)
+  const foldViewRef = useRef(foldView)
+  const lineCountRef = useRef(lineCount)
   const collapsedKeysRef = useRef(collapsedKeys)
-  const visibleMapRef = useRef(visibleMap)
-  const visibleLinesRef = useRef(visibleLines)
   valueRef.current = value
-  linesRef.current = lines
-  sourceViewRef.current = sourceView
+  hasFoldsRef.current = hasFolds
+  foldLinesRef.current = foldLines
+  foldViewRef.current = foldView
+  lineCountRef.current = lineCount
   collapsedKeysRef.current = collapsedKeys
-  visibleMapRef.current = visibleMap
-  visibleLinesRef.current = visibleLines
+  // Total line count regardless of regime (fold state derives it from the view).
+  const totalLines = useCallback(
+    () =>
+      hasFoldsRef.current && foldLinesRef.current
+        ? foldLinesRef.current.length
+        : lineCountRef.current || 1,
+    []
+  )
 
   const setTextareaRef = useCallback((node) => {
     localTextareaRef.current = node
@@ -260,7 +193,12 @@ function SourceEditorPane({
     const padBottom = parseFloat(cs.paddingBottom) || 0
     const fontSize = parseFloat(cs.fontSize) || 14
     const fallbackLineHeight = parseFloat(cs.lineHeight) || fontSize * 1.75
-    const rowCount = Math.max(1, visibleLinesRef.current.length)
+    const rowCount = Math.max(
+      1,
+      hasFoldsRef.current && foldViewRef.current
+        ? foldViewRef.current.displayLines.length
+        : lineCountRef.current || 1
+    )
     const measuredContentHeight = el.scrollHeight - padTop - padBottom
     let lineHeight = measuredContentHeight > 0 ? measuredContentHeight / rowCount : fallbackLineHeight
     if (!Number.isFinite(lineHeight) || lineHeight < fallbackLineHeight * 0.5 || lineHeight > fallbackLineHeight * 1.5) {
@@ -274,11 +212,12 @@ function SourceEditorPane({
   }, [])
 
   const scrollToSourceLine = useCallback((lineNumber, commit = false) => {
-    const linesNow = linesRef.current
-    const total = linesNow.length
+    const total = totalLines()
     const ln = Math.min(Math.max(1, lineNumber), total)
     const targetIdx = ln - 1
-    const hiddenBy = sourceViewRef.current.hiddenByLine.get(targetIdx)
+    const hiddenBy = hasFoldsRef.current
+      ? foldViewRef.current?.hiddenByLine.get(targetIdx)
+      : null
     if (hiddenBy?.length) {
       setCollapsedKeys((prev) => {
         const next = new Set(prev)
@@ -290,12 +229,23 @@ function SourceEditorPane({
     const apply = () => {
       const el = localTextareaRef.current
       if (!el) return
-      const map = visibleMapRef.current
-      const displayLines = visibleLinesRef.current
-      const row = Math.max(0, map.indexOf(targetIdx))
-      let off = 0
-      for (let k = 0; k < row; k++) off += (displayLines[k] || '').length + 1
-      const lineText = displayLines[row] || ''
+      let row, off, lineText
+      if (hasFoldsRef.current && foldViewRef.current) {
+        const map = foldViewRef.current.visibleMap
+        const displayLines = foldViewRef.current.displayLines
+        row = Math.max(0, map.indexOf(targetIdx))
+        off = 0
+        for (let k = 0; k < row; k++) off += (displayLines[k] || '').length + 1
+        lineText = displayLines[row] || ''
+      } else {
+        // No folds: row === line index. The full view isn't materialized on this
+        // path, so split once here — a user-level jump, not a keystroke cost.
+        const all = String(valueRef.current ?? '').split('\n')
+        row = Math.min(targetIdx, all.length - 1)
+        off = 0
+        for (let k = 0; k < row; k++) off += (all[k] || '').length + 1
+        lineText = all[row] || ''
+      }
       if (commit) {
         el.focus()
         el.setSelectionRange(off, off + lineText.length)
@@ -308,36 +258,40 @@ function SourceEditorPane({
 
     requestAnimationFrame(apply)
     setTimeout(apply, hiddenBy?.length ? 90 : 0)
-  }, [syncSourceGutters])
+  }, [syncSourceGutters, totalLines])
 
   useLayoutEffect(() => {
     const el = localTextareaRef.current
     if (!el) return
     el.__hmSourceApi = {
       getFullValue: () => valueRef.current,
-      getLineCount: () => linesRef.current.length,
+      getLineCount: totalLines,
       scrollToLine: scrollToSourceLine
     }
     return () => {
       if (el.__hmSourceApi?.scrollToLine === scrollToSourceLine) delete el.__hmSourceApi
     }
-  }, [scrollToSourceLine])
+  }, [scrollToSourceLine, totalLines])
 
   useLayoutEffect(() => {
     measureSourceMetrics()
     syncSourceGutters()
-  }, [lineNumbers, sourceView.foldRows, measureSourceMetrics, syncSourceGutters])
+  }, [lineNumbers, foldRows, measureSourceMetrics, syncSourceGutters])
 
   const handleChange = useCallback((e) => {
     if (!collapsedKeysRef.current.size) {
       onChange(e)
       return
     }
+    // Folds active: the textarea edits the derived view; patch it back into the
+    // full text. foldLines/foldView are computed synchronously in this regime,
+    // so the patch base can never be stale.
+    const fv = foldViewRef.current
     const nextContent = patchFoldedSourceLines(
-      linesRef.current,
-      visibleLinesRef.current,
+      foldLinesRef.current,
+      fv.displayLines,
       e.target.value.split('\n'),
-      visibleMapRef.current
+      fv.visibleMap
     )
     onChange({ target: { value: nextContent } })
   }, [onChange])
@@ -371,7 +325,7 @@ function SourceEditorPane({
         {lineNumbers}
       </pre>
       <div ref={foldGutterRef} className="source-fold-gutter">
-        {sourceView.foldRows.map((fold) => (
+        {foldRows.map((fold) => (
           <button
             key={`${fold.line}:${fold.key}`}
             type="button"
@@ -391,7 +345,7 @@ function SourceEditorPane({
       </div>
     </div>
   )
-}
+})
 
 export default function App() {
   const session = useRef(loadSession()).current
