@@ -16,7 +16,14 @@ import {
   isExistsError,
   isHeavyDoc,
   buildSessionTabs,
-  sessionSnapshotEqual
+  sessionSnapshotEqual,
+  RECENTS_MAX,
+  rememberRecent,
+  removeRecentPath,
+  clearUnpinnedRecents,
+  toggleRecentPinned,
+  reorderTabsList,
+  toggleTabPinnedInList
 } from '../src/renderer/src/paths.js'
 
 describe('isNewerVersion', () => {
@@ -168,8 +175,43 @@ describe('buildSessionTabs (what survives a restart)', () => {
     expect(untitled).toEqual([])
   })
   it('tolerates missing/empty input', () => {
-    expect(buildSessionTabs(undefined)).toEqual({ openPaths: [], untitled: [] })
-    expect(buildSessionTabs([])).toEqual({ openPaths: [], untitled: [] })
+    expect(buildSessionTabs(undefined)).toEqual({ openPaths: [], pinnedPaths: [], untitled: [] })
+    expect(buildSessionTabs([])).toEqual({ openPaths: [], pinnedPaths: [], untitled: [] })
+  })
+  it('records pinned tab paths (pathless pins are dropped)', () => {
+    const tabs = [
+      { path: '/a.md', pinned: true, content: '', savedContent: '' },
+      { path: '/b.md', content: '', savedContent: '' },
+      { path: null, pinned: true, content: 'x', savedContent: '' }
+    ]
+    expect(buildSessionTabs(tabs).pinnedPaths).toEqual(['/a.md'])
+  })
+})
+
+describe('reorderTabsList / toggleTabPinnedInList', () => {
+  const tab = (id, pinned = false) => ({ id, pinned })
+
+  it('moves a tab to the drop target position', () => {
+    const out = reorderTabsList([tab('a'), tab('b'), tab('c')], 'a', 'c')
+    expect(out.map((t) => t.id)).toEqual(['b', 'c', 'a'])
+  })
+  it('keeps the pinned group in front — an unpinned tab cannot enter it', () => {
+    const out = reorderTabsList([tab('p', true), tab('a'), tab('b')], 'b', 'p')
+    expect(out.map((t) => t.id)).toEqual(['p', 'b', 'a'])
+  })
+  it('a pinned tab dragged into the unpinned zone snaps back to the pinned tail', () => {
+    const out = reorderTabsList([tab('p1', true), tab('p2', true), tab('a')], 'p1', 'a')
+    expect(out.map((t) => t.id)).toEqual(['p2', 'p1', 'a'])
+  })
+  it('returns the input unchanged for unknown ids', () => {
+    const list = [tab('a'), tab('b')]
+    expect(reorderTabsList(list, 'a', 'zzz')).toBe(list)
+  })
+  it('pinning moves the tab into the front group; unpinning leaves it at the group boundary', () => {
+    const pinned = toggleTabPinnedInList([tab('a'), tab('b')], 'b')
+    expect(pinned.map((t) => [t.id, !!t.pinned])).toEqual([['b', true], ['a', false]])
+    const unpinned = toggleTabPinnedInList(pinned, 'b')
+    expect(unpinned.map((t) => [t.id, !!t.pinned])).toEqual([['b', false], ['a', false]])
   })
 })
 
@@ -236,5 +278,59 @@ describe('sessionSnapshotEqual', () => {
     const c = base()
     c.untitled = []
     expect(sessionSnapshotEqual(base(), c)).toBe(false)
+  })
+})
+
+describe('recents helpers', () => {
+  const entry = (path, extra = {}) => ({ path, name: path.split('/').pop(), dir: 'C:/w', openedAt: 1, ...extra })
+
+  describe('rememberRecent', () => {
+    it('inserts at the top and dedupes by normalized path', () => {
+      const prev = [entry('C:/w/a.md')]
+      const next = rememberRecent(prev, entry('C:\\w\\a.md', { openedAt: 2 }))
+      expect(next).toHaveLength(1)
+      expect(next[0].openedAt).toBe(2)
+    })
+    it('preserves the pinned flag when re-remembering', () => {
+      const prev = [entry('C:/w/a.md', { pinned: true })]
+      const next = rememberRecent(prev, entry('C:/w/a.md', { openedAt: 2 }))
+      expect(next[0].pinned).toBe(true)
+    })
+    it('caps only the unpinned tail at RECENTS_MAX, pinned always survive', () => {
+      let list = [entry('C:/w/pin.md', { pinned: true })]
+      for (let i = 0; i < RECENTS_MAX + 3; i++) {
+        list = rememberRecent(list, entry(`C:/w/f${i}.md`))
+      }
+      expect(list.filter((r) => r.pinned)).toHaveLength(1)
+      expect(list.filter((r) => !r.pinned)).toHaveLength(RECENTS_MAX)
+      expect(list[0].path).toBe('C:/w/pin.md') // pinned sorts first
+    })
+  })
+
+  describe('removeRecentPath', () => {
+    it('removes by path with normalization', () => {
+      const prev = [entry('C:/w/a.md'), entry('C:/w/b.md')]
+      expect(removeRecentPath(prev, 'C:\\w\\a.md').map((r) => r.path)).toEqual(['C:/w/b.md'])
+    })
+  })
+
+  describe('clearUnpinnedRecents', () => {
+    it('keeps only pinned entries', () => {
+      const prev = [entry('C:/w/a.md', { pinned: true }), entry('C:/w/b.md')]
+      expect(clearUnpinnedRecents(prev).map((r) => r.path)).toEqual(['C:/w/a.md'])
+    })
+  })
+
+  describe('toggleRecentPinned', () => {
+    it('pins an entry and moves it to the front group', () => {
+      const prev = [entry('C:/w/a.md'), entry('C:/w/b.md')]
+      const next = toggleRecentPinned(prev, 'C:/w/b.md')
+      expect(next[0]).toMatchObject({ path: 'C:/w/b.md', pinned: true })
+    })
+    it('unpins back into the unpinned group', () => {
+      const prev = [entry('C:/w/a.md', { pinned: true }), entry('C:/w/b.md')]
+      const next = toggleRecentPinned(prev, 'C:/w/a.md')
+      expect(next.every((r) => !r.pinned)).toBe(true)
+    })
   })
 })

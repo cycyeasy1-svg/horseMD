@@ -23,12 +23,18 @@ function Tabs({
   onRename,
   onDuplicate,
   onDelete,
-  onExportPdf
+  onExportPdf,
+  onReorder,
+  onTogglePin
 }) {
   const { t } = useI18n()
   const activeRef = useRef(null)
   // Right-click context menu: { x, y, tab } in viewport coords, or null.
   const [menu, setMenu] = useState(null)
+  // Drag-reorder state: the tab id being dragged and the id currently hovered
+  // as a drop target (for the insertion indicator).
+  const dragIdRef = useRef(null)
+  const [dragOverId, setDragOverId] = useState(null)
   // On touch there's no hover to reveal the close ✕, so show it always and use a
   // clear ✕ (the unsaved state is shown in the bottom bar, not as a tab dot).
   const isMobile = window.api.platform === 'ios' || window.api.platform === 'android'
@@ -75,7 +81,37 @@ function Tabs({
             <div
               key={tab.id}
               ref={isLeft ? activeRef : null}
-              className={`tab${isActive ? ' active' : ''}${isActive && !focused ? ' split-peer' : ''}`}
+              className={
+                `tab${isActive ? ' active' : ''}${isActive && !focused ? ' split-peer' : ''}` +
+                `${tab.pinned ? ' pinned' : ''}${dragOverId === tab.id ? ' drag-over' : ''}`
+              }
+              draggable={!isMobile && !!onReorder}
+              onDragStart={(e) => {
+                dragIdRef.current = tab.id
+                e.dataTransfer.effectAllowed = 'move'
+                // Firefox needs data for the drag to start; harmless elsewhere.
+                e.dataTransfer.setData('text/plain', tab.title || '')
+              }}
+              onDragEnd={() => {
+                dragIdRef.current = null
+                setDragOverId(null)
+              }}
+              onDragOver={(e) => {
+                if (!dragIdRef.current || dragIdRef.current === tab.id) return
+                e.preventDefault()
+                e.dataTransfer.dropEffect = 'move'
+                setDragOverId(tab.id)
+              }}
+              onDragLeave={() => {
+                setDragOverId((cur) => (cur === tab.id ? null : cur))
+              }}
+              onDrop={(e) => {
+                e.preventDefault()
+                const from = dragIdRef.current
+                dragIdRef.current = null
+                setDragOverId(null)
+                if (from && from !== tab.id) onReorder?.(from, tab.id)
+              }}
               onClick={() => onActivate(tab.id)}
               onContextMenu={(e) => {
                 e.preventDefault()
@@ -89,6 +125,7 @@ function Tabs({
               }}
               title={tab.path || tab.title}
             >
+              {tab.pinned && <Icon name="pin" size={11} className="tab-pin" />}
               <span className="tab-title">{tab.title}</span>
               <span
                 className={`tab-close${dirty ? ' dirty' : ''}`}
@@ -134,6 +171,14 @@ function Tabs({
               const run = (fn) => () => { fn(); setMenu(null) }
               return (
                 <>
+                  {onTogglePin && (
+                    <>
+                      <button className="tab-menu-item" onClick={run(() => onTogglePin(tab.id))}>
+                        {t(tab.pinned ? 'tab.unpin' : 'tab.pin')}
+                      </button>
+                      <div className="tab-menu-sep" />
+                    </>
+                  )}
                   {window.api.capabilities?.splitView !== false && onOpenRight && tabs.length > 1 && (
                     <>
                       <button className="tab-menu-item" onClick={run(() => onOpenRight(tab.id))}>

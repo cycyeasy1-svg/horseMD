@@ -70,6 +70,77 @@ export function findMatchesInText(text, query, options = {}) {
   return { matches, error: '' }
 }
 
+// Expand $&, $1…$99 and $$ in a regex replacement template (a subset of
+// String.replace semantics — enough for find & replace).
+function expandReplacement(match, template) {
+  return template.replace(/\$(\$|&|\d{1,2})/g, (_s, g) => {
+    if (g === '$') return '$'
+    if (g === '&') return match[0]
+    // "$12" with no group 12 falls back to group 1 followed by a literal "2".
+    if (g.length === 2 && match[Number(g)] === undefined) {
+      const head = match[Number(g[0])]
+      return head === undefined ? '' : head + g[1]
+    }
+    return match[Number(g)] ?? ''
+  })
+}
+
+// Replace matches of `query` in `text`. Pure string-in / string-out so all three
+// editors (rich, keep, source textarea) share it — the caller writes the result
+// back through the tab-content pipeline. Options mirror findMatchesInText
+// (caseSensitive / wholeWord / regex) plus:
+//   options.range     — {start,end} char window; matches outside are left alone
+//                       (the source editor's "in selection" scope).
+//   onlyIndex         — replace just the Nth match (0-based, clamped); null = all.
+// Returns { text, count, error } — count = how many replacements were made.
+export function replaceMatchesInText(text, query, replacement, options = {}, onlyIndex = null) {
+  const source = String(text ?? '')
+  const needle = String(query ?? '')
+  const repl = String(replacement ?? '')
+  if (!source || !needle) return { text: source, count: 0, error: '' }
+
+  let pieces = []
+  if (options.regex) {
+    let re
+    try {
+      re = new RegExp(needle, `g${options.caseSensitive ? '' : 'i'}`)
+    } catch {
+      return { text: source, count: 0, error: 'regex' }
+    }
+    let m
+    while ((m = re.exec(source))) {
+      if (!m[0]) {
+        re.lastIndex += 1
+        continue
+      }
+      if (options.wholeWord && !isWholeWordMatch(source, m.index, m[0].length)) continue
+      pieces.push({ index: m.index, length: m[0].length, insert: expandReplacement(m, repl) })
+    }
+  } else {
+    const { matches } = findMatchesInText(source, needle, options)
+    pieces = matches.map((m) => ({ index: m.index, length: m.length, insert: repl }))
+  }
+
+  if (options.range) {
+    const { start = 0, end = source.length } = options.range
+    pieces = pieces.filter((p) => p.index >= start && p.index + p.length <= end)
+  }
+  if (onlyIndex != null) {
+    const p = pieces[Math.max(0, Math.min(onlyIndex, pieces.length - 1))]
+    pieces = p ? [p] : []
+  }
+  if (!pieces.length) return { text: source, count: 0, error: '' }
+
+  let out = ''
+  let pos = 0
+  for (const p of pieces) {
+    out += source.slice(pos, p.index) + p.insert
+    pos = p.index + p.length
+  }
+  out += source.slice(pos)
+  return { text: out, count: pieces.length, error: '' }
+}
+
 export function findRangesInEl(root, query, options = {}, scopeRange = null) {
   const ranges = []
   if (!root || !query) return { ranges, error: '' }

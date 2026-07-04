@@ -19,6 +19,7 @@ import Welcome from './components/Welcome.jsx'
 import WindowControls from './components/WindowControls.jsx'
 import UpdateToast from './components/UpdateToast.jsx'
 import RenameModal from './components/RenameModal.jsx'
+import Settings from './components/Settings.jsx'
 import {
   loadSettings,
   saveSettings,
@@ -34,11 +35,13 @@ import {
 import { applyCustomTheme } from './customThemes.js'
 import { fireToast, HM_TOAST_EVENT } from './ui.js'
 import logoUrl from './assets/logo.png'
-import { clearFindHighlights, findRangesInEl, paintFindHighlights, scrollRangeIntoView, findMatchesInText, blockIndexForLine } from './find.js'
+import { clearFindHighlights, findRangesInEl, paintFindHighlights, scrollRangeIntoView, findMatchesInText, replaceMatchesInText, blockIndexForLine } from './find.js'
 import {
   isNewerVersion, isAbsolutePath, sanitizeWorkspaces, baseName, dirName, joinPath,
   isPlainTextDoc, isHeavyDoc, genId, LS, loadSession, buildSessionTabs,
-  sessionSnapshotEqual, MD_DOC_RE
+  sessionSnapshotEqual, MD_DOC_RE,
+  rememberRecent, removeRecentPath, clearUnpinnedRecents, toggleRecentPinned,
+  reorderTabsList, toggleTabPinnedInList
 } from './paths.js'
 import {
   countSourceLines,
@@ -382,6 +385,8 @@ export default function App() {
   const sourceModeRef = useRef(sourceMode)
   sourceModeRef.current = sourceMode
   const [paletteOpen, setPaletteOpen] = useState(false)
+  // Unified settings modal (status-bar gear / command palette / File menu).
+  const [settingsOpen, setSettingsOpen] = useState(false)
   // "Home" shows the welcome/landing page while keeping open tabs mounted (so
   // returning to a document doesn't re-create its editor). Cleared whenever a
   // tab is activated or a file is opened.
@@ -412,7 +417,10 @@ export default function App() {
     regex: false,
     inSelection: false,
     selectionAvailable: false,
-    error: ''
+    error: '',
+    // Replace row (Ctrl+H / ⌥⌘F): shown state + the replacement text.
+    showReplace: false,
+    replace: ''
   })
   // Current match set: Range objects (rich editor) or character offsets (source
   // textarea). Held in a ref so next/prev don't trigger re-renders.
@@ -522,7 +530,7 @@ export default function App() {
   // of those actually changes (same trick as openPathsKey above).
   const tabsStripKey = tabs
     .map(
-      (x) => JSON.stringify([x.id, x.title, x.path || '', x.content !== x.savedContent])
+      (x) => JSON.stringify([x.id, x.title, x.path || '', x.content !== x.savedContent, !!x.pinned])
     )
     .join('\n')
   const tabsMeta = useMemo(
@@ -531,7 +539,8 @@ export default function App() {
         id: x.id,
         title: x.title,
         path: x.path,
-        dirty: x.content !== x.savedContent
+        dirty: x.content !== x.savedContent,
+        pinned: !!x.pinned
       })),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tabsStripKey]
@@ -653,6 +662,19 @@ export default function App() {
   useEffect(() => {
     applyTheme(theme)
   }, [theme])
+
+  // Keep the native application menu in the UI language (desktop only; the
+  // mobile shim has no native menus, hence the optional call).
+  useEffect(() => {
+    window.api.setAppLang?.(lang)
+  }, [lang])
+
+  // Push the spellcheck preference to the main process (Chromium spellchecker
+  // lives in the session, not the DOM). Runs on mount too, since main starts
+  // with it disabled.
+  useEffect(() => {
+    window.api.setSpellcheck?.(settings.spellcheck)
+  }, [settings.spellcheck])
 
   // ----------------------------- settings ---------------------------------
   // Apply the editor page width live, and persist any settings change.
@@ -881,7 +903,7 @@ export default function App() {
       const norm = (tab.path || '').replace(/\\/g, '/')
       tabsRef.current = tabsRef.current.filter((t) => t.id !== id)
       setTabs((prev) => prev.filter((t) => t.id !== id))
-      setRecents((prev) => prev.filter((r) => (r.path || '').replace(/\\/g, '/') !== norm))
+      setRecents((prev) => removeRecentPath(prev, norm))
     }
   }, [])
 
@@ -894,12 +916,8 @@ export default function App() {
     let lastId = null
     const seen = new Set()
     const remember = (fp) => {
-      const n = fp.replace(/\\/g, '/')
       setRecents((prev) =>
-        [
-          { path: fp, name: baseName(fp), dir: dirName(fp), openedAt: Date.now() },
-          ...prev.filter((r) => (r.path || '').replace(/\\/g, '/') !== n)
-        ].slice(0, 8)
+        rememberRecent(prev, { path: fp, name: baseName(fp), dir: dirName(fp), openedAt: Date.now() })
       )
     }
     for (const path of paths) {
@@ -946,7 +964,7 @@ export default function App() {
         // recents list so the dead link disappears, and show a friendly message
         // instead of the raw IPC error.
         const missing = e?.message?.includes('ENOENT')
-        setRecents((prev) => prev.filter((r) => (r.path || '').replace(/\\/g, '/') !== norm))
+        setRecents((prev) => removeRecentPath(prev, norm))
         // Startup restore skips missing files quietly; an explicit open (clicking
         // a Recent, File > Open) still tells the user what happened.
         if (!silent) {
@@ -1205,17 +1223,20 @@ export default function App() {
     }
   }, [])
 
-  // Close every tab except `keepId` (from the tab right-click menu).
+  // Close every tab except `keepId` (from the tab right-click menu). Pinned
+  // tabs survive — pinning is exactly the "don't bulk-close this" contract.
   const closeOthers = useCallback((keepId) => {
     setTabs((prev) => {
-      const others = prev.filter((t) => t.id !== keepId)
+      const others = prev.filter((t) => t.id !== keepId && !t.pinned)
+      if (!others.length) return prev
       const firstDirty = others.find((t) => t.content !== t.savedContent)
       if (firstDirty && !window.confirm(tRef.current('confirm.closeUnsaved', { name: firstDirty.title }))) {
         return prev
       }
+      const next = prev.filter((t) => t.id === keepId || t.pinned)
       setActiveId(keepId)
-      setSplitId(null)
-      return prev.filter((t) => t.id === keepId)
+      setSplitId((cur) => (cur != null && next.some((t) => t.id === cur) ? cur : null))
+      return next
     })
   }, [])
 
@@ -1225,18 +1246,29 @@ export default function App() {
     setTabs((prev) => {
       const idx = prev.findIndex((t) => t.id === pivotId)
       if (idx === -1) return prev
-      const toClose = side === 'left' ? prev.slice(0, idx) : prev.slice(idx + 1)
+      const range = side === 'left' ? prev.slice(0, idx) : prev.slice(idx + 1)
+      const toClose = range.filter((t) => !t.pinned) // pinned tabs survive bulk closes
       if (!toClose.length) return prev
       const firstDirty = toClose.find((t) => t.content !== t.savedContent)
       if (firstDirty && !window.confirm(tRef.current('confirm.closeUnsaved', { name: firstDirty.title }))) {
         return prev
       }
-      const next = side === 'left' ? prev.slice(idx) : prev.slice(0, idx + 1)
+      const closing = new Set(toClose.map((t) => t.id))
+      const next = prev.filter((t) => !closing.has(t.id))
       const survives = (id) => id != null && next.some((t) => t.id === id)
       setActiveId((cur) => (survives(cur) ? cur : pivotId))
       setSplitId((cur) => (survives(cur) ? cur : null))
       return next
     })
+  }, [])
+
+  // Tab-strip drag & drop reorder + pin toggle. Both keep the pinned group at
+  // the front (pure helpers in paths.js); tabsRef is synced by the render pass.
+  const reorderTabs = useCallback((fromId, toId) => {
+    setTabs((prev) => reorderTabsList(prev, fromId, toId))
+  }, [])
+  const toggleTabPin = useCallback((id) => {
+    setTabs((prev) => toggleTabPinnedInList(prev, id))
   }, [])
 
   // Stable handlers for the memoized tab strip: split/pane routing is decided
@@ -1319,6 +1351,54 @@ export default function App() {
     },
     [tabs, writeTab, isMobile]
   )
+
+  // ── Autosave (opt-in) ──
+  // Debounced write-to-disk while typing, for tabs that already have a path.
+  // Untitled drafts are excluded (they'd pop a Save As dialog mid-typing) and
+  // so are conflicted tabs (autosave must never clobber an external edit the
+  // user hasn't resolved). Watcher echo is already suppressed downstream: the
+  // file:changed handler ignores events whose mtime <= the tab's saved mtime.
+  const autosaveTimerRef = useRef(0)
+  useEffect(() => {
+    if (!settings.autosave) return
+    const dirty = tabs.filter(
+      (t) => t.path && !t.loading && !t.conflict && t.content !== t.savedContent
+    )
+    if (!dirty.length) return
+    clearTimeout(autosaveTimerRef.current)
+    autosaveTimerRef.current = setTimeout(() => {
+      // Re-check against the live list — the 2s window may have seen a save,
+      // an external reload, or a close.
+      for (const t of dirty) {
+        const live = tabsRef.current.find((x) => x.id === t.id)
+        if (live && live.path && !live.conflict && live.content !== live.savedContent) {
+          saveTab(live.id)
+        }
+      }
+    }, 2000)
+    return () => clearTimeout(autosaveTimerRef.current)
+  }, [tabs, settings.autosave, saveTab])
+
+  // ── Default editor mode ──
+  // When the preference is "rich", opt each NEWLY-opened markdown tab into the
+  // Milkdown editor (the same per-tab set the status-bar toggle flips, so the
+  // user can still switch any tab back). Tabs opened before the preference
+  // changed keep their current engine.
+  const seenTabIdsRef = useRef(new Set())
+  useEffect(() => {
+    const seen = seenTabIdsRef.current
+    const fresh = tabs.filter((t) => !seen.has(t.id))
+    if (!fresh.length) return
+    fresh.forEach((t) => seen.add(t.id))
+    if (settings.defaultEditorMode !== 'rich') return
+    const mdFresh = fresh.filter((t) => !isPlainTextDoc(t))
+    if (!mdFresh.length) return
+    setMilkdownForced((prev) => {
+      const next = new Set(prev)
+      mdFresh.forEach((t) => next.add(t.id))
+      return next
+    })
+  }, [tabs, settings.defaultEditorMode])
 
   // Commit a mobile "save as": let the platform layer place the named file in
   // the local library (it returns a de-duplicated path), then write it.
@@ -1716,6 +1796,26 @@ export default function App() {
       const base = (tab?.title || 'Untitled').replace(/\.(md|markdown|mdx|txt)$/i, '')
       await window.api.exportPDF(html, base + '.pdf')
     },
+    exportHtml: async () => {
+      const id = pickEditableId()
+      const html = editorApis.current[id]?.getDocHTML?.()
+      if (!html) {
+        window.alert(tRef.current('error.exportPdfUnavailable'))
+        return
+      }
+      const tab = tabs.find((x) => x.id === id)
+      const base = (tab?.title || 'Untitled').replace(/\.(md|markdown|mdx|txt)$/i, '')
+      await window.api.exportHTML?.(html, base + '.html', base)
+    },
+    print: async () => {
+      const id = pickEditableId()
+      const html = editorApis.current[id]?.getDocHTML?.()
+      if (!html) {
+        window.alert(tRef.current('error.printUnavailable'))
+        return
+      }
+      await window.api.printHTML?.(html)
+    },
     closeTab: () => activeId && closeTab(activeId),
     palette: () => setPaletteOpen((v) => !v),
     toggleSidebar: () => setSidebarOpen((v) => !v),
@@ -1737,7 +1837,11 @@ export default function App() {
     zoomReset: () => setSettings((prev) => ({ ...prev, zoom: DEFAULT_ZOOM })),
     find: () => {
       openFindRef.current?.()
-    }
+    },
+    replace: () => {
+      openFindRef.current?.(true)
+    },
+    settings: () => setSettingsOpen(true)
   }
 
   // Stable callbacks for the memoized status bar / save FAB: they read live
@@ -1927,6 +2031,7 @@ export default function App() {
       //      moment the user visits them. A restart with 20 tabs reads 1 file.
       const priorityPath =
         session.activePath && paths.includes(session.activePath) ? session.activePath : paths[0]
+      const pinnedSet = new Set(session.pinnedPaths || [])
       const placeholders = paths.map((p) => ({
         id: genId(),
         path: p,
@@ -1936,6 +2041,7 @@ export default function App() {
         mtimeMs: null,
         reloadNonce: 0,
         heavy: false,
+        pinned: pinnedSet.has(p),
         loading: true // not yet read from disk; filled lazily on activation
       }))
       tabsRef.current = [...tabsRef.current, ...placeholders]
@@ -2099,16 +2205,26 @@ export default function App() {
         { id: 'cmd.saveAs', title: t('cmd.saveAs'), icon: 'save', run: () => handlers.current.saveAs() },
         // Export-to-PDF needs a save dialog / print pipeline that doesn't exist on mobile.
         caps.pdfExport && { id: 'cmd.exportPdf', title: t('cmd.exportPdf'), icon: 'file', run: () => handlers.current.exportPdf() },
+        caps.htmlExport && { id: 'cmd.exportHtml', title: t('cmd.exportHtml'), icon: 'file', run: () => handlers.current.exportHtml() },
+        caps.print && { id: 'cmd.print', title: t('cmd.print'), icon: 'file', run: () => handlers.current.print() },
         { id: 'cmd.sidebar', title: t('cmd.sidebar'), icon: 'sidebar', run: () => handlers.current.toggleSidebar() },
         { id: 'cmd.files', title: t('cmd.files'), icon: 'folder', run: () => handlers.current.toggleFiles() },
         { id: 'cmd.outline', title: t('cmd.outline'), icon: 'outline', run: () => handlers.current.toggleOutline() },
         { id: 'cmd.source', title: t('cmd.source'), icon: 'code', run: () => handlers.current.toggleSource() },
         { id: 'cmd.toggleKeep', title: t('cmd.toggleKeep'), icon: 'shield', run: () => handlers.current.toggleEditorMode() },
         { id: 'cmd.theme', title: t('cmd.theme'), icon: 'moon', run: () => handlers.current.toggleTheme() },
-        { id: 'cmd.find', title: t('cmd.find'), icon: 'search', run: () => handlers.current.find() }
+        { id: 'cmd.find', title: t('cmd.find'), icon: 'search', run: () => handlers.current.find() },
+        { id: 'cmd.replace', title: t('cmd.replace'), icon: 'search', run: () => handlers.current.replace() },
+        caps.spellcheck && {
+          id: 'cmd.spell',
+          title: t(settings.spellcheck ? 'cmd.spellOff' : 'cmd.spellOn'),
+          icon: 'check',
+          run: () => updateSettings({ spellcheck: !settings.spellcheck })
+        },
+        { id: 'cmd.settings', title: t('cmd.settings'), icon: 'settings', run: () => handlers.current.settings() }
       ].filter(Boolean)
     },
-    [t]
+    [t, settings.spellcheck, updateSettings]
   )
 
   // Discriminate the active view: the source <textarea> sets sourceRef only when
@@ -2383,6 +2499,54 @@ export default function App() {
     return true
   }, [find.query, runFind, stepFind])
 
+  // ── Replace ──
+  // Replace operates on the tab's MARKDOWN SOURCE (find & replace must keep the
+  // keep-mode round-trip guarantee), then writes back through the same
+  // content + reloadNonce patch external reloads use, so whichever editor is
+  // mounted (rich / keep / textarea) re-reads the new content. For replace-one
+  // in the rich/keep view, the active DOM-range ordinal is used as the source
+  // ordinal — they line up for plain-text queries; when the rendered view and
+  // the source disagree (markdown syntax inside the match), counts may differ
+  // and the ordinal is clamped.
+  const applyReplace = (all) => {
+    if (findModeRef.current !== 'text') return
+    const q = findInputRef.current?.value ?? findQueryRef.current
+    if (!q) return
+    const tab = tabsRef.current.find((x) => x.id === activeIdRef.current)
+    if (!tab || tab.loading) return
+    const options = findOptionsRef.current
+    // "In selection" maps to source offsets only in the source editor; in the
+    // rich/keep view the DOM scope has no source coordinates, so replace works
+    // on the whole document there.
+    const scope = options.inSelection ? activeFindScope() : null
+    const onlyIndex = all ? null : Math.max(0, activeIdxRef.current)
+    const result = replaceMatchesInText(
+      tab.content, q, find.replace,
+      { ...options, range: scope?.source || null },
+      onlyIndex
+    )
+    if (result.error) {
+      setFind((f) => ({ ...f, error: result.error }))
+      return
+    }
+    if (!result.count) return
+    rememberFindQuery(q)
+    const patch = (t) =>
+      t.id === tab.id
+        ? { ...t, content: result.text, reloadNonce: t.reloadNonce + 1, heavy: isHeavyDoc(result.text) }
+        : t
+    tabsRef.current = tabsRef.current.map(patch)
+    setTabs((prev) => prev.map(patch))
+    if (all) fireToast(tRef.current('find.replacedCount', { n: result.count }))
+    // Re-run the search once the editor has remounted with the new content, so
+    // the highlights/count reflect the post-replace document and replace-one can
+    // be pressed repeatedly. (Keep mode paints in chunks; runFind flushes it.)
+    clearFindHighlights()
+    findRangesRef.current = []
+    activeIdxRef.current = -1
+    setTimeout(() => runFind(q, options, all ? 0 : onlyIndex), 90)
+  }
+
   // ── Line-number locate ──
   // Briefly highlight a preview block (display-only class) and scroll it center.
   const flashBlock = (el) => {
@@ -2456,7 +2620,7 @@ export default function App() {
     runLineJump(String(next), true)
   }, [runLineJump])
 
-  const openFind = () => {
+  const openFind = (withReplace = false) => {
     const selectedScope = getSelectedFindScope()
     const savedScope = selectedScope ? saveFindScope(selectedScope) : activeFindScope()
     const session = findSessionsRef.current[activeFindKey()] || {}
@@ -2482,7 +2646,9 @@ export default function App() {
       active: query ? f.active : 0,
       inSelection,
       selectionAvailable: !!savedScope,
-      error: ''
+      error: '',
+      // Ctrl+H opens with the replace row; plain Ctrl+F collapses it.
+      showReplace: !!withReplace
     }))
     selectFindInputSoon()
     saveFindSession({ query, mode: 'text', inSelection })
@@ -2546,6 +2712,18 @@ export default function App() {
         e.preventDefault()
         e.stopPropagation()
         openFindRef.current?.()
+        return
+      }
+
+      // Find & replace: Ctrl+H on Windows/Linux; ⌥⌘F on macOS (⌘H hides the app).
+      const isReplaceCombo =
+        window.api.platform === 'darwin'
+          ? e.metaKey && e.altKey && !e.ctrlKey && !e.shiftKey && e.code === 'KeyF'
+          : e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && e.code === 'KeyH'
+      if (isReplaceCombo) {
+        e.preventDefault()
+        e.stopPropagation()
+        openFindRef.current?.(true)
         return
       }
 
@@ -2795,6 +2973,8 @@ export default function App() {
           onDuplicate={duplicateTabFile}
           onDelete={deleteTabFile}
           onExportPdf={exportPathToPdf}
+          onReorder={reorderTabs}
+          onTogglePin={toggleTabPin}
         />
         <div className="topbar-spacer" />
         <button className="icon-btn drag-no" title={`${t('welcome.newFile')} (Ctrl+N)`} onClick={newTab}>
@@ -2853,6 +3033,17 @@ export default function App() {
         <main className="pane-center">
           {find.open && (
             <div className={`findbar${find.error ? ' has-error' : ''}`}>
+              <div className="findbar-row">
+              {find.mode === 'text' && (
+                <button
+                  className={`findbar-replace-toggle${find.showReplace ? ' active' : ''}`}
+                  title={t('find.toggleReplace')}
+                  aria-pressed={find.showReplace}
+                  onClick={() => setFind((f) => ({ ...f, showReplace: !f.showReplace }))}
+                >
+                  <Icon name={find.showReplace ? 'chevron-down' : 'chevron-right'} size={13} />
+                </button>
+              )}
               <button
                 className={`findbar-mode${find.mode === 'line' ? ' active' : ''}`}
                 title={t(find.mode === 'line' ? 'find.modeLine' : 'find.modeText')}
@@ -2935,6 +3126,43 @@ export default function App() {
               <button title={t('find.close')} onClick={closeFind}>
                 <Icon name="close" size={14} />
               </button>
+              </div>
+              {find.mode === 'text' && find.showReplace && (
+                <div className="findbar-row findbar-replace-row">
+                  <input
+                    className="findbar-replace-input"
+                    value={find.replace}
+                    placeholder={t('find.replacePlaceholder')}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      setFind((f) => ({ ...f, replace: v }))
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        applyReplace(e.ctrlKey || e.metaKey)
+                      }
+                      if (e.key === 'Escape') closeFind()
+                    }}
+                  />
+                  <button
+                    className="findbar-replace-btn"
+                    disabled={!find.query || !find.matches || !!find.error}
+                    title={t('find.replaceTip')}
+                    onClick={() => applyReplace(false)}
+                  >
+                    {t('find.replace')}
+                  </button>
+                  <button
+                    className="findbar-replace-btn"
+                    disabled={!find.query || !find.matches || !!find.error}
+                    title={t('find.replaceAllTip')}
+                    onClick={() => applyReplace(true)}
+                  >
+                    {t('find.replaceAll')}
+                  </button>
+                </div>
+              )}
             </div>
           )}
 
@@ -3093,6 +3321,9 @@ export default function App() {
               onOpen={() => handlers.current.open()}
               onOpenFolder={openFolder}
               onOpenRecent={(p) => openPaths([p])}
+              onRemoveRecent={(p) => setRecents((prev) => removeRecentPath(prev, p))}
+              onClearRecents={() => setRecents((prev) => clearUnpinnedRecents(prev))}
+              onTogglePinRecent={(p) => setRecents((prev) => toggleRecentPinned(prev, p))}
             />
           )}
         </main>
@@ -3137,6 +3368,34 @@ export default function App() {
         paragraphSpacing={settings.paragraphSpacing}
         onSetParagraphSpacing={onSetParagraphSpacing}
         filterInfo={activeTab ? keepFilters[activeTab.id] : null}
+        onOpenSettings={() => setSettingsOpen(true)}
+      />
+
+      <Settings
+        open={settingsOpen}
+        onClose={() => setSettingsOpen(false)}
+        settings={settings}
+        updateSettings={updateSettings}
+        theme={theme}
+        setTheme={pickBuiltinTheme}
+        customThemes={customThemes}
+        customTheme={customTheme}
+        onPickCustom={setCustomTheme}
+        onRefreshThemes={refreshThemes}
+        onOpenThemesFolder={onOpenThemesFolder}
+        onGetMoreThemes={onGetMoreThemes}
+        typographyProps={{
+          fontSize: settings.fontSize,
+          onSetFontSize,
+          pageWidth: settings.pageWidth,
+          onSetPageWidth,
+          zoom: settings.zoom,
+          onSetZoom,
+          lineHeight: settings.lineHeight,
+          onSetLineHeight,
+          paragraphSpacing: settings.paragraphSpacing,
+          onSetParagraphSpacing
+        }}
       />
 
       <SaveFab

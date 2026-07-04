@@ -34,7 +34,16 @@ describe('loadSettings / saveSettings', () => {
     expect(loadSettings()).toEqual(DEFAULT_SETTINGS)
   })
   it('round-trips saved values', () => {
-    const saved = { pageWidth: 900, fontSize: 18, zoom: 1.25, lineHeight: 2.0, paragraphSpacing: 1.2 }
+    const saved = {
+      pageWidth: 900,
+      fontSize: 18,
+      zoom: 1.25,
+      lineHeight: 2.0,
+      paragraphSpacing: 1.2,
+      spellcheck: true,
+      autosave: true,
+      defaultEditorMode: 'rich'
+    }
     saveSettings(saved)
     expect(loadSettings()).toEqual(saved)
   })
@@ -54,8 +63,25 @@ describe('loadSettings / saveSettings', () => {
       fontSize: 24,
       zoom: 2,
       lineHeight: 2.4,
-      paragraphSpacing: 2
+      paragraphSpacing: 2,
+      spellcheck: false,
+      autosave: false,
+      defaultEditorMode: 'keep'
     })
+  })
+  it('coerces the boolean flags strictly', () => {
+    saveSettings({ spellcheck: 'yes', autosave: 1 })
+    expect(loadSettings().spellcheck).toBe(false)
+    expect(loadSettings().autosave).toBe(false)
+    saveSettings({ spellcheck: true, autosave: true })
+    expect(loadSettings().spellcheck).toBe(true)
+    expect(loadSettings().autosave).toBe(true)
+  })
+  it('normalizes defaultEditorMode to keep|rich', () => {
+    saveSettings({ defaultEditorMode: 'weird' })
+    expect(loadSettings().defaultEditorMode).toBe('keep')
+    saveSettings({ defaultEditorMode: 'rich' })
+    expect(loadSettings().defaultEditorMode).toBe('rich')
   })
   it('keeps the "full" page-width preset as-is', () => {
     saveSettings({ pageWidth: 'full', fontSize: 16, zoom: 1 })

@@ -82,7 +82,17 @@ export const DEFAULT_SETTINGS = {
   fontSize: DEFAULT_FONT_SIZE,
   zoom: DEFAULT_ZOOM,
   lineHeight: DEFAULT_LINE_HEIGHT,
-  paragraphSpacing: DEFAULT_PARA_SPACING
+  paragraphSpacing: DEFAULT_PARA_SPACING,
+  // Chromium's built-in spellchecker (red squiggles + right-click suggestions).
+  // Off by default: CJK prose has no dictionaries and mixed-language documents
+  // would light up with false positives.
+  spellcheck: false,
+  // Debounced write-to-disk for SAVED files while typing (untitled drafts still
+  // go through Save As). Off by default — keep mode users often diff on save.
+  autosave: false,
+  // Which editor a newly-opened .md tab starts in: the source-preserving keep
+  // editor (default) or the Milkdown WYSIWYG. Per-tab toggle still overrides.
+  defaultEditorMode: 'keep'
 }
 
 const round1 = (n) => Math.round(n * 10) / 10
@@ -129,7 +139,10 @@ export function loadSettings() {
         PARA_SPACING_MIN,
         PARA_SPACING_MAX,
         DEFAULT_PARA_SPACING
-      )
+      ),
+      spellcheck: raw.spellcheck === true,
+      autosave: raw.autosave === true,
+      defaultEditorMode: raw.defaultEditorMode === 'rich' ? 'rich' : 'keep'
     }
   } catch {
     return { ...DEFAULT_SETTINGS }

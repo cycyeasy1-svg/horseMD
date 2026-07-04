@@ -2474,8 +2474,9 @@ body.hm-full-width .source-editor-wrap {
   right: 24px;
   z-index: 30;
   display: flex;
-  align-items: center;
-  gap: 8px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 4px;
   max-width: calc(100vw - 48px);
   background: var(--bg-elevated);
   border: 1px solid var(--border);
@@ -2488,6 +2489,11 @@ body.hm-full-width .source-editor-wrap {
   from { opacity: 0; transform: translateY(-8px); }
   to { opacity: 1; transform: translateY(0); }
 }
+.findbar-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 .findbar input {
   background: transparent;
   border: none;
@@ -2496,6 +2502,19 @@ body.hm-full-width .source-editor-wrap {
   font-size: 13px;
   width: clamp(132px, 22vw, 220px);
   padding: 2px 6px;
+}
+.findbar .findbar-replace-toggle {
+  min-width: 20px;
+  padding: 4px 2px;
+}
+.findbar-replace-row .findbar-replace-input {
+  flex: 1;
+  width: auto;
+  min-width: 100px;
+}
+.findbar .findbar-replace-btn {
+  white-space: nowrap;
+  font-weight: 500;
 }
 .findbar input.is-error {
   color: var(--danger);
@@ -2941,6 +2960,9 @@ body.hm-full-width .source-editor-wrap {
   overflow: hidden;
 }
 .welcome-recents-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
@@ -2948,6 +2970,20 @@ body.hm-full-width .source-editor-wrap {
   color: var(--faint);
   padding: 0 10px 8px;
 }
+.recents-clear {
+  border: none;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  color: var(--faint);
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: var(--radius-md);
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.welcome-recents:hover .recents-clear { opacity: 1; }
+.recents-clear:hover { color: var(--text); background: var(--hover); }
 .welcome-recents-list {
   display: flex;
   flex-direction: column;
@@ -3006,6 +3042,38 @@ body.hm-full-width .source-editor-wrap {
   font-size: 12px;
   color: var(--faint);
   white-space: nowrap;
+}
+/* Pin / remove appear on hover, replacing the timestamp to avoid row jitter. */
+.recent-actions {
+  flex: 0 0 auto;
+  display: none;
+  align-items: center;
+  gap: 2px;
+}
+.recent-item:hover .recent-actions,
+.recent-item:focus-within .recent-actions { display: flex; }
+.recent-item:hover .recent-time,
+.recent-item:focus-within .recent-time { display: none; }
+.recent-act {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-md);
+  color: var(--faint);
+  cursor: pointer;
+}
+.recent-act:hover { color: var(--text); background: var(--active); }
+.recent-act.active { color: var(--accent); }
+/* A pinned entry keeps a subtle pin marker visible even without hover. */
+.recent-item.pinned .recent-name::after {
+  content: '📌';
+  font-size: 10px;
+  margin-left: 6px;
+  opacity: 0.7;
 }
 
 .welcome-hints {
@@ -4424,4 +4492,167 @@ body.hm-full-width .km-doc {
 body.hm-has-custom-theme .km-doc {
   max-width: none;
   color: inherit;
+}
+
+/* =====================================================
+   Unified Settings modal
+   ===================================================== */
+.hm-settings-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: color-mix(in srgb, #000 32%, transparent);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: menuFadeIn 0.12s var(--ease-out);
+}
+.hm-settings {
+  width: 520px;
+  max-width: 92vw;
+  max-height: 82vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+}
+.hm-settings-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--border);
+}
+.hm-settings-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+.hm-settings-close {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+}
+.hm-settings-close:hover { background: var(--hover); color: var(--text); }
+.hm-settings-body {
+  overflow-y: auto;
+  padding: 6px 16px 16px;
+}
+.hm-set-section { padding-top: 12px; }
+.hm-set-section + .hm-set-section {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+}
+.hm-set-section-title {
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--faint);
+  margin-bottom: 8px;
+}
+.hm-set-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 7px 0;
+}
+.hm-set-text { min-width: 0; }
+.hm-set-label { font-size: 13px; color: var(--text); }
+.hm-set-desc { font-size: 11.5px; color: var(--faint); margin-top: 2px; line-height: 1.5; }
+/* Toggle switch */
+.hm-switch {
+  flex: 0 0 auto;
+  width: 36px;
+  height: 20px;
+  border-radius: 10px;
+  background: var(--active);
+  position: relative;
+  transition: background 0.15s var(--ease-out);
+}
+.hm-switch.on { background: var(--accent); }
+.hm-switch-knob {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+  transition: left 0.15s var(--ease-out);
+}
+.hm-switch.on .hm-switch-knob { left: 18px; }
+/* Small segmented control (default mode / language) */
+.hm-set-seg {
+  display: inline-flex;
+  gap: 2px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-editor);
+}
+.hm-set-seg-item {
+  padding: 4px 12px;
+  font-size: 12px;
+  border-radius: calc(var(--radius-sm) - 2px);
+  color: var(--muted);
+}
+.hm-set-seg-item:hover { background: var(--hover); color: var(--text); }
+.hm-set-seg-item.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+/* Theme grid */
+.hm-set-themes {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 4px;
+}
+.hm-set-theme {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 10px;
+  font-size: 13px;
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  text-align: left;
+}
+.hm-set-theme:hover { background: var(--hover); }
+.hm-set-theme.active { background: var(--accent-soft); color: var(--accent-strong); font-weight: 600; }
+.hm-set-theme-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+.hm-set-theme-actions button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 12px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.hm-set-theme-actions button:hover { background: var(--hover); color: var(--text); }
+
+/* Tab strip: pin + drag-reorder affordances */
+.tab .tab-pin {
+  flex: 0 0 auto;
+  color: var(--accent);
+  margin-right: -2px;
+}
+.tab.pinned .tab-title { font-weight: 600; }
+/* Insertion indicator while dragging a tab over this one. */
+.tab.drag-over {
+  box-shadow: inset 2px 0 0 var(--accent);
 }

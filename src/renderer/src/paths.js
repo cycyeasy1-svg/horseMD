@@ -81,6 +81,40 @@ export function isHeavyDoc(content) {
   return false
 }
 
+// ---- Recent files (welcome screen) -----------------------------------------
+// Entries are { path, name, dir, openedAt, pinned? }. Pinned entries always
+// survive and sort first; only the unpinned tail is capped. Paths compare
+// normalized (\ → /) so a Windows path recorded both ways stays one entry.
+export const RECENTS_MAX = 8
+const normPath = (p) => (p || '').replace(/\\/g, '/')
+const samePath = (a, b) => normPath(a) === normPath(b)
+
+export function rememberRecent(prev, entry) {
+  const list = prev || []
+  const old = list.find((r) => samePath(r.path, entry.path))
+  const next = [
+    { ...entry, pinned: !!old?.pinned },
+    ...list.filter((r) => !samePath(r.path, entry.path))
+  ]
+  return [
+    ...next.filter((r) => r.pinned),
+    ...next.filter((r) => !r.pinned).slice(0, RECENTS_MAX)
+  ]
+}
+
+export const removeRecentPath = (prev, path) =>
+  (prev || []).filter((r) => !samePath(r.path, path))
+
+// "Clear" keeps pinned entries — pinning is an explicit "don't lose this".
+export const clearUnpinnedRecents = (prev) => (prev || []).filter((r) => r.pinned)
+
+export function toggleRecentPinned(prev, path) {
+  const next = (prev || []).map((r) =>
+    samePath(r.path, path) ? { ...r, pinned: !r.pinned } : r
+  )
+  return [...next.filter((r) => r.pinned), ...next.filter((r) => !r.pinned)]
+}
+
 let idCounter = 0
 export const genId = () => `t${++idCounter}_${Date.now()}`
 
@@ -94,18 +128,41 @@ export const loadSession = () => {
 }
 
 // Build the persistable tab slices of a session snapshot from the live tabs.
-//   • openPaths — every saved tab's path (reopened from disk on restart).
-//   • untitled  — unsaved scratch/new tabs (no path) kept ONLY when they're
+//   • openPaths   — every saved tab's path (reopened from disk on restart).
+//   • pinnedPaths — the pinned subset, so pins survive a restart (order comes
+//     from openPaths; this is just the membership set).
+//   • untitled    — unsaved scratch/new tabs (no path) kept ONLY when they're
 //     DIRTY and non-blank, carrying just {title, content}. So a restart restores
 //     real unsaved work but never resurrects the untouched welcome doc or an
 //     empty new tab (content === savedContent, or whitespace-only → dropped).
 // Pure so the data-loss contract is unit-testable; see App.jsx persistence effect.
 export const buildSessionTabs = (tabs) => ({
   openPaths: (tabs || []).map((t) => t.path).filter(Boolean),
+  pinnedPaths: (tabs || []).filter((t) => t.pinned && t.path).map((t) => t.path),
   untitled: (tabs || [])
     .filter((t) => !t.path && t.content !== t.savedContent && (t.content || '').trim())
     .map((t) => ({ title: t.title, content: t.content }))
 })
+
+// Reorder the tab list by dragging: move `fromId` to `toId`'s position, then
+// stable-partition pinned-first so a drag can never mix the two regions (a
+// pinned tab dropped into the unpinned zone snaps back to the pinned group's
+// tail, and vice versa — relative order inside each group is preserved).
+export function reorderTabsList(tabs, fromId, toId) {
+  const list = [...(tabs || [])]
+  const from = list.findIndex((t) => t.id === fromId)
+  const to = list.findIndex((t) => t.id === toId)
+  if (from === -1 || to === -1 || from === to) return tabs
+  const [moved] = list.splice(from, 1)
+  list.splice(to, 0, moved)
+  return [...list.filter((t) => t.pinned), ...list.filter((t) => !t.pinned)]
+}
+
+// Toggle a tab's pinned flag and regroup pinned-first.
+export function toggleTabPinnedInList(tabs, id) {
+  const list = (tabs || []).map((t) => (t.id === id ? { ...t, pinned: !t.pinned } : t))
+  return [...list.filter((t) => t.pinned), ...list.filter((t) => !t.pinned)]
+}
 
 // Field-wise equality of two session snapshots. App's persistence effect uses
 // it to skip re-writing localStorage when nothing persistable changed — e.g.
@@ -134,6 +191,10 @@ export const sessionSnapshotEqual = (a, b) => {
   const bp = b.openPaths || []
   if (ap.length !== bp.length) return false
   for (let i = 0; i < ap.length; i++) if (ap[i] !== bp[i]) return false
+  const app = a.pinnedPaths || []
+  const bpp = b.pinnedPaths || []
+  if (app.length !== bpp.length) return false
+  for (let i = 0; i < app.length; i++) if (app[i] !== bpp[i]) return false
   const au = a.untitled || []
   const bu = b.untitled || []
   if (au.length !== bu.length) return false

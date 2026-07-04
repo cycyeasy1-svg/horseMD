@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, dialog, Menu, shell, net, nativeTheme } from 'electron'
+import { app, BrowserWindow, ipcMain, dialog, Menu, MenuItem, shell, net, nativeTheme } from 'electron'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { dirname, join, basename, extname, resolve, sep } from 'node:path'
 import fs from 'node:fs/promises'
@@ -235,6 +235,31 @@ function createWindow() {
     if (url.startsWith('http')) shell.openExternal(url)
   })
 
+  // Spellcheck is an opt-in preference (settings), reported by the renderer via
+  // 'spell:set' after mount. Start disabled so Chinese/Japanese prose isn't
+  // covered in squiggles before the preference arrives.
+  mainWindow.webContents.session.setSpellCheckerEnabled(false)
+
+  // Native context menu ONLY for misspelled words (suggestions + add-to-dict).
+  // Everything else keeps the renderer's own context menus untouched.
+  mainWindow.webContents.on('context-menu', (_e, params) => {
+    if (!params.misspelledWord) return
+    const wc = mainWindow.webContents
+    const L = MENU_STRINGS[menuLang] || MENU_STRINGS.en
+    const menu = new Menu()
+    for (const s of (params.dictionarySuggestions || []).slice(0, 5)) {
+      menu.append(new MenuItem({ label: s, click: () => wc.replaceMisspelling(s) }))
+    }
+    if (params.dictionarySuggestions?.length) menu.append(new MenuItem({ type: 'separator' }))
+    menu.append(
+      new MenuItem({
+        label: L.addToDictionary || MENU_STRINGS.en.addToDictionary,
+        click: () => wc.session.addWordToSpellCheckerDictionary(params.misspelledWord)
+      })
+    )
+    menu.popup()
+  })
+
   // Keep the renderer's maximize/restore button icon in sync with the real
   // window state (e.g. double-click drag-to-maximize, OS shortcuts).
   const emitMaxState = () => sendToRenderer('window:maximized', mainWindow?.isMaximized() ?? false)
@@ -343,6 +368,87 @@ ipcMain.handle('export:pdf', async (_e, { html, defaultName }) => {
   }
   shell.openPath(res.filePath)
   return { path: res.filePath }
+})
+
+// Export the current document as a self-contained .html file: same inline-
+// styled snapshot the PDF pipeline uses, wrapped in a standalone page with the
+// print stylesheet, with local (file://) images inlined as data: URLs so the
+// file survives being mailed / moved on its own.
+const HTML_EXPORT_CSS = `
+  @media screen { body { max-width: 880px; margin: 0 auto; padding: 44px 28px; } }
+`
+
+const MIME_BY_EXT = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.svg': 'image/svg+xml',
+  '.bmp': 'image/bmp',
+  '.avif': 'image/avif',
+  '.ico': 'image/x-icon'
+}
+
+async function inlineFileImages(html) {
+  const urls = new Set()
+  for (const m of html.matchAll(/src="(file:\/\/[^"]+)"/g)) urls.add(m[1])
+  let out = html
+  for (const url of urls) {
+    try {
+      const p = fileURLToPath(decodeURI(url).replace(/&amp;/g, '&'))
+      const mime = MIME_BY_EXT[extname(p).toLowerCase()]
+      if (!mime) continue
+      const data = await fs.readFile(p)
+      out = out.split(`src="${url}"`).join(`src="data:${mime};base64,${data.toString('base64')}"`)
+    } catch {
+      /* unreadable image — leave the file:// src in place */
+    }
+  }
+  return out
+}
+
+const escapeHtml = (s) =>
+  String(s ?? '').replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
+
+ipcMain.handle('export:html', async (_e, { html, defaultName, title }) => {
+  const res = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName || 'Untitled.html',
+    filters: [{ name: 'HTML', extensions: ['html'] }]
+  })
+  if (res.canceled || !res.filePath) return { canceled: true }
+  const body = await inlineFileImages(html)
+  const doc =
+    `<!doctype html><html><head><meta charset="utf-8">` +
+    `<meta name="viewport" content="width=device-width, initial-scale=1">` +
+    `<title>${escapeHtml(title)}</title>` +
+    `<style>${PDF_CSS}${HTML_EXPORT_CSS}</style></head>` +
+    `<body><div class="doc">${body}</div></body></html>`
+  await fs.writeFile(res.filePath, doc, 'utf8')
+  shell.openPath(res.filePath)
+  return { path: res.filePath }
+})
+
+// Print the current document via the system print dialog. Same hidden-window
+// rendering pipeline as export:pdf, but ends in webContents.print() so the
+// user picks a printer / paper / copies natively.
+ipcMain.handle('print:html', async (_e, { html }) => {
+  const doc = `<!doctype html><html><head><meta charset="utf-8"><style>${PDF_CSS}</style></head><body><div class="doc">${html}</div></body></html>`
+  const tmp = join(app.getPath('temp'), `easymarkdown-print-${Date.now()}.html`)
+  await fs.writeFile(tmp, doc, 'utf8')
+  const win = new BrowserWindow({ show: false, webPreferences: { webSecurity: false } })
+  try {
+    await win.loadFile(tmp)
+    // The window must stay alive until the dialog is done — print() resolves
+    // its callback after the user prints or cancels.
+    const ok = await new Promise((resolve) => {
+      win.webContents.print({ printBackground: true }, (success) => resolve(success))
+    })
+    return { ok }
+  } finally {
+    if (!win.isDestroyed()) win.destroy()
+    fs.unlink(tmp).catch(() => {})
+  }
 })
 
 ipcMain.handle('fs:readFile', async (_e, path) => {
@@ -828,66 +934,219 @@ function menuCmd(cmd) {
   return () => sendToRenderer('menu', cmd)
 }
 
+// Menu labels follow the renderer's UI language (app:setLang rebuilds the menu).
+// English omits role labels so Electron's native ones apply; zh/ja override
+// role labels too, since the OS locale may not match the in-app language.
+const MENU_STRINGS = {
+  en: {
+    file: 'File',
+    newFile: 'New File',
+    openFile: 'Open File…',
+    openFolder: 'Open Folder…',
+    save: 'Save',
+    saveAs: 'Save As…',
+    exportPdf: 'Export as PDF…',
+    exportHtml: 'Export as HTML…',
+    print: 'Print…',
+    settings: 'Settings…',
+    closeTab: 'Close Tab',
+    edit: 'Edit',
+    find: 'Find',
+    replace: 'Replace',
+    view: 'View',
+    palette: 'Command Palette',
+    toggleSidebar: 'Toggle Sidebar',
+    toggleOutline: 'Toggle Outline',
+    toggleSource: 'Toggle Source Mode',
+    toggleTheme: 'Toggle Theme',
+    zoomIn: 'Zoom In',
+    zoomOut: 'Zoom Out',
+    zoomReset: 'Reset Zoom',
+    addToDictionary: 'Add to Dictionary'
+  },
+  zh: {
+    file: '文件',
+    newFile: '新建文件',
+    openFile: '打开文件…',
+    openFolder: '打开文件夹…',
+    save: '保存',
+    saveAs: '另存为…',
+    exportPdf: '导出为 PDF…',
+    exportHtml: '导出为 HTML…',
+    print: '打印…',
+    settings: '设置…',
+    closeTab: '关闭标签页',
+    closeWindow: '关闭窗口',
+    quit: '退出',
+    edit: '编辑',
+    undo: '撤销',
+    redo: '重做',
+    cut: '剪切',
+    copy: '复制',
+    paste: '粘贴',
+    selectAll: '全选',
+    find: '查找',
+    replace: '替换',
+    view: '视图',
+    palette: '命令面板',
+    toggleSidebar: '切换侧边栏',
+    toggleOutline: '切换大纲',
+    toggleSource: '切换源码模式',
+    toggleTheme: '切换主题',
+    zoomIn: '放大',
+    zoomOut: '缩小',
+    zoomReset: '重置缩放',
+    fullscreen: '切换全屏',
+    devTools: '开发者工具',
+    window: '窗口',
+    addToDictionary: '添加到词典'
+  },
+  ja: {
+    file: 'ファイル',
+    newFile: '新規ファイル',
+    openFile: 'ファイルを開く…',
+    openFolder: 'フォルダーを開く…',
+    save: '保存',
+    saveAs: '名前を付けて保存…',
+    exportPdf: 'PDF として書き出す…',
+    exportHtml: 'HTML として書き出す…',
+    print: '印刷…',
+    settings: '設定…',
+    closeTab: 'タブを閉じる',
+    closeWindow: 'ウィンドウを閉じる',
+    quit: '終了',
+    edit: '編集',
+    undo: '元に戻す',
+    redo: 'やり直す',
+    cut: '切り取り',
+    copy: 'コピー',
+    paste: '貼り付け',
+    selectAll: 'すべて選択',
+    find: '検索',
+    replace: '置換',
+    view: '表示',
+    palette: 'コマンドパレット',
+    toggleSidebar: 'サイドバーの切替',
+    toggleOutline: 'アウトラインの切替',
+    toggleSource: 'ソースモードの切替',
+    toggleTheme: 'テーマの切替',
+    zoomIn: '拡大',
+    zoomOut: '縮小',
+    zoomReset: 'ズームをリセット',
+    fullscreen: 'フルスクリーンの切替',
+    devTools: '開発者ツール',
+    window: 'ウィンドウ',
+    addToDictionary: '辞書に追加'
+  }
+}
+
+let menuLang = 'en'
+
+// A role item keeps Electron's native (OS-localized) label unless the current
+// menu language provides an explicit override.
+function roleItem(role, label, extra) {
+  return label ? { role, label, ...extra } : { role, ...extra }
+}
+
 function buildMenu() {
   const isMac = process.platform === 'darwin'
+  const L = MENU_STRINGS[menuLang] || MENU_STRINGS.en
   const template = [
     ...(isMac ? [{ role: 'appMenu' }] : []),
     {
-      label: 'File',
+      label: L.file,
       submenu: [
-        { label: 'New File', accelerator: 'CmdOrCtrl+N', click: menuCmd('new') },
-        { label: 'Open File…', accelerator: 'CmdOrCtrl+O', click: menuCmd('open') },
-        { label: 'Open Folder…', accelerator: 'CmdOrCtrl+Shift+O', click: menuCmd('openFolder') },
+        { label: L.newFile, accelerator: 'CmdOrCtrl+N', click: menuCmd('new') },
+        { label: L.openFile, accelerator: 'CmdOrCtrl+O', click: menuCmd('open') },
+        { label: L.openFolder, accelerator: 'CmdOrCtrl+Shift+O', click: menuCmd('openFolder') },
         { type: 'separator' },
-        { label: 'Save', accelerator: 'CmdOrCtrl+S', click: menuCmd('save') },
-        { label: 'Save As…', accelerator: 'CmdOrCtrl+Shift+S', click: menuCmd('saveAs') },
-        { label: 'Export as PDF…', accelerator: 'CmdOrCtrl+Shift+E', click: menuCmd('exportPdf') },
+        { label: L.save, accelerator: 'CmdOrCtrl+S', click: menuCmd('save') },
+        { label: L.saveAs, accelerator: 'CmdOrCtrl+Shift+S', click: menuCmd('saveAs') },
+        { label: L.exportPdf, accelerator: 'CmdOrCtrl+Shift+E', click: menuCmd('exportPdf') },
+        { label: L.exportHtml, accelerator: 'CmdOrCtrl+Shift+H', click: menuCmd('exportHtml') },
+        // Ctrl/Cmd+P is the command palette, so print gets the Alt variant.
+        { label: L.print, accelerator: 'CmdOrCtrl+Alt+P', click: menuCmd('print') },
         { type: 'separator' },
-        { label: 'Close Tab', accelerator: 'CmdOrCtrl+W', click: menuCmd('closeTab') },
+        { label: L.settings, accelerator: 'CmdOrCtrl+,', click: menuCmd('settings') },
+        { type: 'separator' },
+        { label: L.closeTab, accelerator: 'CmdOrCtrl+W', click: menuCmd('closeTab') },
         // macOS: give "Close Window" Shift+Cmd+W so it doesn't fight Close Tab
         // for Cmd+W (role 'close' otherwise defaults to Cmd+W). Windows: Quit.
-        isMac ? { role: 'close', accelerator: 'Shift+CmdOrCtrl+W' } : { role: 'quit' }
+        isMac
+          ? roleItem('close', L.closeWindow, { accelerator: 'Shift+CmdOrCtrl+W' })
+          : roleItem('quit', L.quit)
       ]
     },
     {
-      label: 'Edit',
+      label: L.edit,
       submenu: [
-        { role: 'undo' },
-        { role: 'redo' },
+        roleItem('undo', L.undo),
+        roleItem('redo', L.redo),
         { type: 'separator' },
-        { role: 'cut' },
-        { role: 'copy' },
-        { role: 'paste' },
-        { role: 'selectAll' },
+        roleItem('cut', L.cut),
+        roleItem('copy', L.copy),
+        roleItem('paste', L.paste),
+        roleItem('selectAll', L.selectAll),
         { type: 'separator' },
-        { label: 'Find', accelerator: 'CmdOrCtrl+F', click: menuCmd('find') }
+        { label: L.find, accelerator: 'CmdOrCtrl+F', click: menuCmd('find') },
+        // macOS: ⌘H hides the app, so replace uses the VS Code-style ⌥⌘F there.
+        { label: L.replace, accelerator: isMac ? 'Alt+Cmd+F' : 'Ctrl+H', click: menuCmd('replace') }
       ]
     },
     {
-      label: 'View',
+      label: L.view,
       submenu: [
-        { label: 'Command Palette', accelerator: 'CmdOrCtrl+P', click: menuCmd('palette') },
+        { label: L.palette, accelerator: 'CmdOrCtrl+P', click: menuCmd('palette') },
         // Sidebar toggle is handled in the renderer (capture phase) so it wins
         // over the editor's Ctrl/Cmd+B "bold" binding instead of conflicting.
-        { label: 'Toggle Sidebar', click: menuCmd('toggleSidebar') },
-        { label: 'Toggle Outline', accelerator: 'CmdOrCtrl+Shift+L', click: menuCmd('toggleOutline') },
-        { label: 'Toggle Source Mode', accelerator: 'CmdOrCtrl+/', click: menuCmd('toggleSource') },
+        { label: L.toggleSidebar, click: menuCmd('toggleSidebar') },
+        { label: L.toggleOutline, accelerator: 'CmdOrCtrl+Shift+L', click: menuCmd('toggleOutline') },
+        { label: L.toggleSource, accelerator: 'CmdOrCtrl+/', click: menuCmd('toggleSource') },
         { type: 'separator' },
-        { label: 'Toggle Theme', accelerator: 'CmdOrCtrl+Shift+T', click: menuCmd('toggleTheme') },
+        { label: L.toggleTheme, accelerator: 'CmdOrCtrl+Shift+T', click: menuCmd('toggleTheme') },
         { type: 'separator' },
         // Content-only zoom (not Electron's whole-window webFrame zoom): the
         // renderer scales just the editor document. Keep the familiar
         // accelerators so Cmd/Ctrl +/-/0 feel native.
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+=', click: menuCmd('zoomIn') },
-        { label: 'Zoom In', accelerator: 'CmdOrCtrl+Plus', click: menuCmd('zoomIn'), visible: false, acceleratorWorksWhenHidden: true },
-        { label: 'Zoom Out', accelerator: 'CmdOrCtrl+-', click: menuCmd('zoomOut') },
-        { label: 'Reset Zoom', accelerator: 'CmdOrCtrl+0', click: menuCmd('zoomReset') },
+        { label: L.zoomIn, accelerator: 'CmdOrCtrl+=', click: menuCmd('zoomIn') },
+        { label: L.zoomIn, accelerator: 'CmdOrCtrl+Plus', click: menuCmd('zoomIn'), visible: false, acceleratorWorksWhenHidden: true },
+        { label: L.zoomOut, accelerator: 'CmdOrCtrl+-', click: menuCmd('zoomOut') },
+        { label: L.zoomReset, accelerator: 'CmdOrCtrl+0', click: menuCmd('zoomReset') },
         { type: 'separator' },
-        { role: 'togglefullscreen' },
-        { role: 'toggleDevTools' }
+        roleItem('togglefullscreen', L.fullscreen),
+        roleItem('toggleDevTools', L.devTools)
       ]
     },
-    { role: 'windowMenu' }
+    roleItem('windowMenu', L.window)
   ]
   Menu.setApplicationMenu(Menu.buildFromTemplate(template))
 }
+
+// Renderer reports its UI language (on mount and on every switch) so the
+// native menu follows the in-app language instead of staying English.
+ipcMain.handle('app:setLang', (_e, lang) => {
+  const next = MENU_STRINGS[lang] ? lang : 'en'
+  if (next === menuLang) return
+  menuLang = next
+  buildMenu()
+})
+
+// Toggle Chromium's built-in spellchecker (opt-in preference; default off).
+// Windows/Linux use Hunspell dictionaries — pick the OS locale + English,
+// filtered to what's actually available (zh/ja have no dictionaries, which is
+// fine: the spellchecker just skips CJK text). macOS uses the native system
+// spellchecker, where setSpellCheckerLanguages is a no-op.
+ipcMain.handle('spell:set', (_e, enabled) => {
+  const ses = mainWindow?.webContents.session
+  if (!ses) return
+  if (enabled && process.platform !== 'darwin') {
+    try {
+      const avail = ses.availableSpellCheckerLanguages || []
+      const want = [app.getLocale(), 'en-US'].filter((l) => avail.includes(l))
+      ses.setSpellCheckerLanguages([...new Set(want)])
+    } catch {
+      /* keep whatever Chromium defaults to */
+    }
+  }
+  ses.setSpellCheckerEnabled(!!enabled)
+})

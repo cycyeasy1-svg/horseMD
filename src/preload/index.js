@@ -36,6 +36,9 @@ const api = {
   openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   saveAs: (defaultName) => ipcRenderer.invoke('dialog:saveAs', defaultName),
   exportPDF: (html, defaultName) => ipcRenderer.invoke('export:pdf', { html, defaultName }),
+  exportHTML: (html, defaultName, title) =>
+    ipcRenderer.invoke('export:html', { html, defaultName, title }),
+  printHTML: (html) => ipcRenderer.invoke('print:html', { html }),
 
   // fs
   readFile: (path) => ipcRenderer.invoke('fs:readFile', path),
@@ -97,6 +100,12 @@ const api = {
   // update check (notify-only)
   checkUpdate: () => ipcRenderer.invoke('update:check'),
 
+  // report the UI language so the native application menu follows it
+  setAppLang: (lang) => ipcRenderer.invoke('app:setLang', lang),
+
+  // toggle the built-in spellchecker (settings preference)
+  setSpellcheck: (enabled) => ipcRenderer.invoke('spell:set', enabled),
+
   // app close: main asks before closing so the renderer can warn about unsaved
   // changes, then calls confirmAppClose() to proceed or cancelAppClose() to abort.
   confirmAppClose: () => ipcRenderer.send('app:confirm-close'),
@@ -123,6 +132,9 @@ const api = {
     watch: true,
     windowControls: true,
     pdfExport: true,
+    htmlExport: true,
+    print: true,
+    spellcheck: true,
     nativeMenus: true,
     externalShell: true,
     revealInFolder: true,

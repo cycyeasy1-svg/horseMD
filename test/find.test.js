@@ -2,7 +2,7 @@
 // block-index mapping. The DOM-highlighting helpers (CSS Custom Highlight API)
 // are intentionally not covered here — they belong to the future E2E layer.
 import { describe, it, expect } from 'vitest'
-import { matchIndices, findMatchesInText, docBlocks, blockIndexForLine } from '../src/renderer/src/find.js'
+import { matchIndices, findMatchesInText, replaceMatchesInText, docBlocks, blockIndexForLine } from '../src/renderer/src/find.js'
 
 describe('matchIndices', () => {
   it('returns all case-insensitive match offsets', () => {
@@ -33,6 +33,46 @@ describe('findMatchesInText', () => {
   it('supports regular expressions and reports invalid patterns', () => {
     expect(offsets(findMatchesInText('A-1 B-22', '[A-Z]-\\d+', { regex: true }))).toEqual([[0, 3], [4, 4]])
     expect(findMatchesInText('abc', '[', { regex: true })).toMatchObject({ matches: [], error: 'regex' })
+  })
+})
+
+describe('replaceMatchesInText', () => {
+  it('replaces all literal matches (case-insensitive by default)', () => {
+    expect(replaceMatchesInText('Foo foo FOO', 'foo', 'bar')).toEqual({
+      text: 'bar bar bar',
+      count: 3,
+      error: ''
+    })
+  })
+  it('honors caseSensitive and wholeWord options', () => {
+    expect(replaceMatchesInText('Foo foo', 'foo', 'x', { caseSensitive: true }).text).toBe('Foo x')
+    expect(replaceMatchesInText('cat scatter cat', 'cat', 'dog', { wholeWord: true }).text).toBe(
+      'dog scatter dog'
+    )
+  })
+  it('replaces only the Nth match when onlyIndex is given (clamped)', () => {
+    expect(replaceMatchesInText('a a a', 'a', 'b', {}, 1).text).toBe('a b a')
+    expect(replaceMatchesInText('a a a', 'a', 'b', {}, 99).text).toBe('a a b')
+    expect(replaceMatchesInText('a a a', 'a', 'b', {}, 0)).toMatchObject({ count: 1 })
+  })
+  it('restricts replacement to options.range (in-selection scope)', () => {
+    const r = replaceMatchesInText('x x x x', 'x', 'y', { range: { start: 2, end: 5 } })
+    expect(r.text).toBe('x y y x')
+    expect(r.count).toBe(2)
+  })
+  it('expands $1/$&/$$ in regex replacements and reports bad patterns', () => {
+    expect(
+      replaceMatchesInText('A-1 B-22', '([A-Z])-(\\d+)', '$2:$1', { regex: true }).text
+    ).toBe('1:A 22:B')
+    expect(replaceMatchesInText('ab', 'a', '[$&]$$', { regex: true }).text).toBe('[a]$b')
+    expect(replaceMatchesInText('abc', '[', 'x', { regex: true })).toMatchObject({
+      count: 0,
+      error: 'regex'
+    })
+  })
+  it('returns the input untouched for empty text or query', () => {
+    expect(replaceMatchesInText('', 'a', 'b')).toEqual({ text: '', count: 0, error: '' })
+    expect(replaceMatchesInText('abc', '', 'b').text).toBe('abc')
   })
 })
 

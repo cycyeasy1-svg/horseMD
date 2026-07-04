@@ -26,7 +26,18 @@ function relTime(ts, lang, t) {
 }
 
 // Welcome / empty-state screen: logo, version, quick actions, recent files.
-export default function Welcome({ t, lang, recents, onNew, onOpen, onOpenFolder, onOpenRecent }) {
+export default function Welcome({
+  t,
+  lang,
+  recents,
+  onNew,
+  onOpen,
+  onOpenFolder,
+  onOpenRecent,
+  onRemoveRecent,
+  onClearRecents,
+  onTogglePinRecent
+}) {
   return (
     <div className="welcome">
       <div className="welcome-card">
@@ -51,17 +62,59 @@ export default function Welcome({ t, lang, recents, onNew, onOpen, onOpenFolder,
 
         {recents && recents.length > 0 && (
           <div className="welcome-recents">
-            <div className="welcome-recents-head">{t('welcome.recent')}</div>
+            <div className="welcome-recents-head">
+              <span>{t('welcome.recent')}</span>
+              {recents.some((r) => !r.pinned) && (
+                <button className="recents-clear" onClick={onClearRecents}>
+                  {t('welcome.clearRecents')}
+                </button>
+              )}
+            </div>
             <div className="welcome-recents-list">
               {recents.map((r) => (
-                <button key={r.path} className="recent-item" onClick={() => onOpenRecent(r.path)} title={r.path}>
+                <div
+                  key={r.path}
+                  className={'recent-item' + (r.pinned ? ' pinned' : '')}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => onOpenRecent(r.path)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault()
+                      onOpenRecent(r.path)
+                    }
+                  }}
+                  title={r.path}
+                >
                   <Icon name="file" size={16} className="recent-icon" />
                   <span className="recent-main">
                     <span className="recent-name">{r.name}</span>
                     <span className="recent-path">{r.dir}</span>
                   </span>
                   <span className="recent-time">{relTime(r.openedAt, lang, t)}</span>
-                </button>
+                  <span className="recent-actions">
+                    <button
+                      className={'recent-act' + (r.pinned ? ' active' : '')}
+                      title={t(r.pinned ? 'welcome.unpinRecent' : 'welcome.pinRecent')}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onTogglePinRecent(r.path)
+                      }}
+                    >
+                      <Icon name="pin" size={13} />
+                    </button>
+                    <button
+                      className="recent-act"
+                      title={t('welcome.removeRecent')}
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRemoveRecent(r.path)
+                      }}
+                    >
+                      <Icon name="close" size={13} />
+                    </button>
+                  </span>
+                </div>
               ))}
             </div>
           </div>

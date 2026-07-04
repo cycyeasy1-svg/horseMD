@@ -73,6 +73,10 @@ export const STRINGS = {
     'welcome.openFile': 'Open File',
     'welcome.openFolder': 'Open Folder',
     'welcome.recent': 'Recent files',
+    'welcome.clearRecents': 'Clear',
+    'welcome.pinRecent': 'Pin to top',
+    'welcome.unpinRecent': 'Unpin',
+    'welcome.removeRecent': 'Remove from list',
     'time.justNow': 'just now',
     'time.minutesAgo': '{n} min ago',
     'time.hoursAgo': '{n}h ago',
@@ -135,6 +139,13 @@ export const STRINGS = {
 
     // find
     'find.placeholder': 'Find in document',
+    'find.toggleReplace': 'Toggle replace',
+    'find.replacePlaceholder': 'Replace with',
+    'find.replace': 'Replace',
+    'find.replaceAll': 'All',
+    'find.replaceTip': 'Replace current match (Enter)',
+    'find.replaceAllTip': 'Replace all matches (Ctrl+Enter)',
+    'find.replacedCount': 'Replaced {n} occurrences',
     'find.next': 'Next',
     'find.prev': 'Prev',
     'find.close': 'Close',
@@ -161,7 +172,12 @@ export const STRINGS = {
     'cmd.save': 'Save',
     'cmd.saveAs': 'Save As…',
     'cmd.exportPdf': 'Export as PDF…',
+    'cmd.print': 'Print…',
+    'cmd.exportHtml': 'Export as HTML…',
+    'cmd.spellOn': 'Enable Spellcheck',
+    'cmd.spellOff': 'Disable Spellcheck',
     'error.exportPdfUnavailable': 'Open a Markdown document first to export it as PDF.',
+    'error.printUnavailable': 'Open a Markdown document first to print it.',
     'cmd.sidebar': 'Toggle Sidebar',
     'nav.home': 'Home',
     'lightbox.close': 'Close (Esc)',
@@ -175,6 +191,7 @@ export const STRINGS = {
     'cmd.source': 'Toggle Source Mode',
     'cmd.theme': 'Cycle Theme',
     'cmd.find': 'Find in File',
+    'cmd.replace': 'Find and Replace',
 
     // page width (status-bar popover) + image host (top-bar popover)
     'settings.pageWidth': 'Editor width',
@@ -202,6 +219,20 @@ export const STRINGS = {
     'settings.paraSpacingPreset.relaxed': 'Relaxed',
     'settings.paraSpacingPreset.loose': 'Loose',
 
+    // unified settings modal
+    'settings.title': 'Settings',
+    'settings.sectionEditing': 'Editing',
+    'settings.sectionTypography': 'Typography',
+    'settings.sectionAppearance': 'Appearance',
+    'settings.sectionLanguage': 'Language',
+    'settings.defaultMode': 'Default editor for Markdown',
+    'settings.defaultModeDesc': 'New tabs open in this editor; the status-bar toggle still switches any tab.',
+    'settings.autosave': 'Autosave',
+    'settings.autosaveDesc': 'Write saved files to disk automatically about 2 s after you stop typing.',
+    'settings.spellcheck': 'Spellcheck',
+    'settings.spellcheckDesc': 'Underline misspelled words; right-click for suggestions.',
+    'cmd.settings': 'Open Settings',
+
     // mermaid live preview
     'mermaid.rendering': 'Rendering diagram…',
     'mermaid.empty': 'Empty mermaid block',
@@ -227,6 +258,8 @@ export const STRINGS = {
     'code.copied': 'Copied',
 
     // tab context menu
+    'tab.pin': 'Pin Tab',
+    'tab.unpin': 'Unpin Tab',
     'tab.copyPath': 'Copy File Path',
     'tab.copyName': 'Copy File Name',
     'tab.reveal': 'Reveal in Folder',
@@ -354,6 +387,10 @@ export const STRINGS = {
     'welcome.openFile': '打开文件',
     'welcome.openFolder': '打开文件夹',
     'welcome.recent': '最近文件',
+    'welcome.clearRecents': '清空',
+    'welcome.pinRecent': '固定到顶部',
+    'welcome.unpinRecent': '取消固定',
+    'welcome.removeRecent': '从列表移除',
     'time.justNow': '刚刚',
     'time.minutesAgo': '{n} 分钟前',
     'time.hoursAgo': '{n} 小时前',
@@ -412,6 +449,13 @@ export const STRINGS = {
     'outline.collapse': '收起',
 
     'find.placeholder': '在文档中查找',
+    'find.toggleReplace': '切换替换',
+    'find.replacePlaceholder': '替换为',
+    'find.replace': '替换',
+    'find.replaceAll': '全部',
+    'find.replaceTip': '替换当前匹配（Enter）',
+    'find.replaceAllTip': '替换全部匹配（Ctrl+Enter）',
+    'find.replacedCount': '已替换 {n} 处',
     'find.next': '下一个',
     'find.prev': '上一个',
     'find.close': '关闭',
@@ -436,7 +480,12 @@ export const STRINGS = {
     'cmd.save': '保存',
     'cmd.saveAs': '另存为…',
     'cmd.exportPdf': '导出为 PDF…',
+    'cmd.print': '打印…',
+    'cmd.exportHtml': '导出为 HTML…',
+    'cmd.spellOn': '开启拼写检查',
+    'cmd.spellOff': '关闭拼写检查',
     'error.exportPdfUnavailable': '请先打开一个 Markdown 文档再导出 PDF。',
+    'error.printUnavailable': '请先打开一个 Markdown 文档再打印。',
     'cmd.sidebar': '切换侧边栏',
     'nav.home': '主页',
     'lightbox.close': '关闭（Esc）',
@@ -450,6 +499,7 @@ export const STRINGS = {
     'cmd.source': '切换源码模式',
     'cmd.theme': '切换主题',
     'cmd.find': '在文件中查找',
+    'cmd.replace': '查找并替换',
 
     // 页宽 / 字号 / 缩放（状态栏弹窗）
     'settings.pageWidth': '编辑区宽度',
@@ -477,6 +527,20 @@ export const STRINGS = {
     'settings.paraSpacingPreset.relaxed': '宽松',
     'settings.paraSpacingPreset.loose': '松散',
 
+    // unified settings modal
+    'settings.title': '设置',
+    'settings.sectionEditing': '编辑',
+    'settings.sectionTypography': '排版',
+    'settings.sectionAppearance': '外观',
+    'settings.sectionLanguage': '语言',
+    'settings.defaultMode': 'Markdown 默认编辑器',
+    'settings.defaultModeDesc': '新打开的标签使用此编辑器；状态栏按钮仍可随时切换单个标签。',
+    'settings.autosave': '自动保存',
+    'settings.autosaveDesc': '已保存过的文件在停止输入约 2 秒后自动写盘。',
+    'settings.spellcheck': '拼写检查',
+    'settings.spellcheckDesc': '为拼写错误的单词加下划线，右键查看建议。',
+    'cmd.settings': '打开设置',
+
     // mermaid 实时预览
     'mermaid.rendering': '正在渲染图表…',
     'mermaid.empty': '空的 mermaid 代码块',
@@ -499,6 +563,8 @@ export const STRINGS = {
     'code.copy': '复制',
     'code.copied': '已复制',
 
+    'tab.pin': '固定标签',
+    'tab.unpin': '取消固定',
     'tab.copyPath': '复制文件路径',
     'tab.copyName': '复制文件名',
     'tab.reveal': '打开所在文件夹',
@@ -626,6 +692,10 @@ export const STRINGS = {
     'welcome.openFile': 'ファイルを開く',
     'welcome.openFolder': 'フォルダを開く',
     'welcome.recent': '最近のファイル',
+    'welcome.clearRecents': 'クリア',
+    'welcome.pinRecent': '先頭に固定',
+    'welcome.unpinRecent': '固定を解除',
+    'welcome.removeRecent': 'リストから削除',
     'time.justNow': 'たった今',
     'time.minutesAgo': '{n} 分前',
     'time.hoursAgo': '{n} 時間前',
@@ -688,6 +758,13 @@ export const STRINGS = {
 
     // find
     'find.placeholder': 'ドキュメント内を検索',
+    'find.toggleReplace': '置換の切替',
+    'find.replacePlaceholder': '置換後の文字列',
+    'find.replace': '置換',
+    'find.replaceAll': 'すべて',
+    'find.replaceTip': '現在の一致を置換（Enter）',
+    'find.replaceAllTip': 'すべて置換（Ctrl+Enter）',
+    'find.replacedCount': '{n} 件を置換しました',
     'find.next': '次へ',
     'find.prev': '前へ',
     'find.close': '閉じる',
@@ -714,7 +791,12 @@ export const STRINGS = {
     'cmd.save': '保存',
     'cmd.saveAs': '名前を付けて保存…',
     'cmd.exportPdf': 'PDF としてエクスポート…',
+    'cmd.print': '印刷…',
+    'cmd.exportHtml': 'HTML としてエクスポート…',
+    'cmd.spellOn': 'スペルチェックを有効化',
+    'cmd.spellOff': 'スペルチェックを無効化',
     'error.exportPdfUnavailable': 'PDF としてエクスポートするには、先に Markdown ドキュメントを開いてください。',
+    'error.printUnavailable': '印刷するには、先に Markdown ドキュメントを開いてください。',
     'cmd.sidebar': 'サイドバーの切り替え',
     'nav.home': 'ホーム',
     'lightbox.close': '閉じる（Esc）',
@@ -728,6 +810,7 @@ export const STRINGS = {
     'cmd.source': 'ソースモードの切り替え',
     'cmd.theme': 'テーマを切り替え',
     'cmd.find': 'ファイル内を検索',
+    'cmd.replace': '検索と置換',
 
     // page width (status-bar popover) + image host (top-bar popover)
     'settings.pageWidth': 'エディタ幅',
@@ -755,6 +838,20 @@ export const STRINGS = {
     'settings.paraSpacingPreset.relaxed': 'ゆったり',
     'settings.paraSpacingPreset.loose': '広め',
 
+    // unified settings modal
+    'settings.title': '設定',
+    'settings.sectionEditing': '編集',
+    'settings.sectionTypography': 'レイアウト',
+    'settings.sectionAppearance': '外観',
+    'settings.sectionLanguage': '言語',
+    'settings.defaultMode': 'Markdown の既定エディター',
+    'settings.defaultModeDesc': '新しく開くタブはこのエディターで開きます。ステータスバーからいつでも切り替え可能です。',
+    'settings.autosave': '自動保存',
+    'settings.autosaveDesc': '保存済みファイルは入力停止から約 2 秒後に自動で書き込みます。',
+    'settings.spellcheck': 'スペルチェック',
+    'settings.spellcheckDesc': 'スペルミスの単語に下線を表示し、右クリックで候補を表示します。',
+    'cmd.settings': '設定を開く',
+
     // mermaid live preview
     'mermaid.rendering': '図を描画中…',
     'mermaid.empty': '空の mermaid ブロック',
@@ -780,6 +877,8 @@ export const STRINGS = {
     'code.copied': 'コピーしました',
 
     // tab context menu
+    'tab.pin': 'タブを固定',
+    'tab.unpin': '固定を解除',
     'tab.copyPath': 'ファイルパスをコピー',
     'tab.copyName': 'ファイル名をコピー',
     'tab.reveal': 'フォルダで表示',
