@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { memo, useDeferredValue, useEffect, useMemo, useRef, useState } from 'react'
 import { Icon } from './icons.jsx'
 import logoUrl from '../assets/logo.png'
 import { useI18n } from '../i18n.jsx'
@@ -616,7 +616,7 @@ function MobileMore({
   )
 }
 
-export default function StatusBar({
+function StatusBar({
   tab,
   isMobile,
   onSave,
@@ -651,7 +651,11 @@ export default function StatusBar({
   filterInfo
 }) {
   const { t } = useI18n()
-  const s = useMemo(() => stats(tab?.content), [tab?.content])
+  // Word/char/reading-time stats run 3 whole-document regex passes; computing
+  // them from a deferred value keeps that work out of the urgent per-keystroke
+  // render. The dirty dot stays on the live content so it flips instantly.
+  const deferredContent = useDeferredValue(tab?.content)
+  const s = useMemo(() => stats(deferredContent), [deferredContent])
   const dirty = tab && tab.content !== tab.savedContent
   return (
     <div className="statusbar">
@@ -782,3 +786,8 @@ export default function StatusBar({
     </div>
   )
 }
+
+// Memoized: App re-renders on every keystroke; with the callbacks above kept
+// stable by App, this skips when only unrelated state changed. While typing the
+// `tab` prop does change — the deferred stats above keep that render cheap.
+export default memo(StatusBar)

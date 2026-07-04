@@ -1690,6 +1690,34 @@ export default function App() {
     }
   }
 
+  // Stable callbacks for the memoized status bar / save FAB: they read live
+  // state through refs (handlers, tabsRef, activeIdRef) so their identity never
+  // changes and typing doesn't force those components to re-render.
+  const onStatusSave = useCallback(() => handlers.current.save(), [])
+  const onStatusShare = useCallback(() => {
+    const tab = tabsRef.current.find((x) => x.id === activeIdRef.current)
+    if (!tab) return
+    if (!tab.path) {
+      fireToast(tRef.current('save.shareNeedsSave'), { sticky: true })
+      return
+    }
+    window.api.shareFile?.(tab.path)
+  }, [])
+  const onToggleKeep = useCallback(() => {
+    dismissModeHint()
+    handlers.current.toggleEditorMode()
+  }, [dismissModeHint])
+  const onOpenThemesFolder = useCallback(() => window.api.themesReveal?.(), [])
+  const onGetMoreThemes = useCallback(() => window.api.openExternal('https://theme.typora.io/'), [])
+  const onSetPageWidth = useCallback((w) => updateSettings({ pageWidth: w }), [updateSettings])
+  const onSetFontSize = useCallback((s) => updateSettings({ fontSize: s }), [updateSettings])
+  const onSetZoom = useCallback((z) => updateSettings({ zoom: normalizeZoom(z) }), [updateSettings])
+  const onSetLineHeight = useCallback((v) => updateSettings({ lineHeight: v }), [updateSettings])
+  const onSetParagraphSpacing = useCallback(
+    (v) => updateSettings({ paragraphSpacing: v }),
+    [updateSettings]
+  )
+
   useEffect(() => {
     const offMenu = window.api.onMenu((cmd) => handlers.current[cmd]?.())
     const offOpen = window.api.onOpenPaths((paths) => openPaths(paths))
@@ -3021,23 +3049,16 @@ export default function App() {
       <StatusBar
         tab={home ? null : activeTab}
         isMobile={isMobile}
-        onSave={() => handlers.current.save()}
-        onShare={() => {
-          if (!activeTab) return
-          if (!activeTab.path) {
-            fireToast(tRef.current('save.shareNeedsSave'), { sticky: true })
-            return
-          }
-          window.api.shareFile?.(activeTab.path)
-        }}
+        onSave={onStatusSave}
+        onShare={onStatusShare}
         theme={theme}
         setTheme={pickBuiltinTheme}
         customThemes={customThemes}
         customTheme={customTheme}
         onPickCustom={setCustomTheme}
         onRefreshThemes={refreshThemes}
-        onOpenThemesFolder={() => window.api.themesReveal?.()}
-        onGetMoreThemes={() => window.api.openExternal('https://theme.typora.io/')}
+        onOpenThemesFolder={onOpenThemesFolder}
+        onGetMoreThemes={onGetMoreThemes}
         lang={lang}
         setLang={setLang}
         sourceMode={sourceMode}
@@ -3050,28 +3071,25 @@ export default function App() {
           !!activeTab && !isPlainTextDoc(activeTab) && !sourceMode
         }
         keepMode={!!activeTab && !milkdownForced.has(activeTab.id)}
-        onToggleKeep={() => {
-          dismissModeHint()
-          handlers.current.toggleEditorMode()
-        }}
+        onToggleKeep={onToggleKeep}
         showModeHint={showModeHint}
         onDismissModeHint={dismissModeHint}
         pageWidth={settings.pageWidth}
-        onSetPageWidth={(w) => updateSettings({ pageWidth: w })}
+        onSetPageWidth={onSetPageWidth}
         fontSize={settings.fontSize}
-        onSetFontSize={(s) => updateSettings({ fontSize: s })}
+        onSetFontSize={onSetFontSize}
         zoom={settings.zoom}
-        onSetZoom={(z) => updateSettings({ zoom: normalizeZoom(z) })}
+        onSetZoom={onSetZoom}
         lineHeight={settings.lineHeight}
-        onSetLineHeight={(v) => updateSettings({ lineHeight: v })}
+        onSetLineHeight={onSetLineHeight}
         paragraphSpacing={settings.paragraphSpacing}
-        onSetParagraphSpacing={(v) => updateSettings({ paragraphSpacing: v })}
+        onSetParagraphSpacing={onSetParagraphSpacing}
         filterInfo={activeTab ? keepFilters[activeTab.id] : null}
       />
 
       <SaveFab
         visible={!home && !!activeTab && activeTab.content !== activeTab.savedContent}
-        onSave={() => handlers.current.save()}
+        onSave={onStatusSave}
       />
 
       <CommandPalette
