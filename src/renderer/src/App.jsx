@@ -37,7 +37,8 @@ import logoUrl from './assets/logo.png'
 import { clearFindHighlights, findRangesInEl, paintFindHighlights, scrollRangeIntoView, findMatchesInText, blockIndexForLine } from './find.js'
 import {
   isNewerVersion, isAbsolutePath, sanitizeWorkspaces, baseName, dirName, joinPath,
-  isPlainTextDoc, isHeavyDoc, genId, LS, loadSession, buildSessionTabs, MD_DOC_RE
+  isPlainTextDoc, isHeavyDoc, genId, LS, loadSession, buildSessionTabs,
+  sessionSnapshotEqual, MD_DOC_RE
 } from './paths.js'
 import {
   countSourceLines,
@@ -459,12 +460,17 @@ export default function App() {
   // Latest session snapshot, kept in a ref so the close/flush path can persist it
   // synchronously without waiting on the debounced write.
   const sessionRef = useRef(null)
+  // The snapshot most recently WRITTEN to localStorage — the persistence effect
+  // compares against this (not the previous effect run) to skip no-op writes,
+  // so a pending real change can never be cancelled by a later equal snapshot.
+  const lastWrittenSessionRef = useRef(null)
   // Write the latest snapshot now (close / pagehide / debounce all funnel here,
   // so the persisted shape lives in exactly one place).
   const flushSession = useCallback(() => {
     if (!sessionRef.current) return
     try {
       localStorage.setItem(LS, JSON.stringify(sessionRef.current))
+      lastWrittenSessionRef.current = sessionRef.current
     } catch {
       /* quota / serialization failure — skip this snapshot */
     }
@@ -1983,6 +1989,11 @@ export default function App() {
       activePath
     }
     sessionRef.current = data
+    // Skip the write entirely when nothing persistable changed since the last
+    // WRITTEN snapshot — typing in a saved file re-runs this effect per
+    // keystroke, but the snapshot's contents are identical (content of saved
+    // tabs isn't persisted), so stringify + localStorage would be pure waste.
+    if (sessionSnapshotEqual(lastWrittenSessionRef.current, data)) return
     // Debounce the write: this effect runs on every keystroke (tabs/content
     // change), and JSON.stringify-ing the whole session — including the full
     // text of large unsaved scratch docs — plus a synchronous localStorage write

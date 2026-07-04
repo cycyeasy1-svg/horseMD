@@ -106,3 +106,39 @@ export const buildSessionTabs = (tabs) => ({
     .filter((t) => !t.path && t.content !== t.savedContent && (t.content || '').trim())
     .map((t) => ({ title: t.title, content: t.content }))
 })
+
+// Field-wise equality of two session snapshots. App's persistence effect uses
+// it to skip re-writing localStorage when nothing persistable changed — e.g.
+// typing in a SAVED file rebuilds the snapshot every keystroke but only its
+// array identities differ, not their contents. Arrays App passes through by
+// state identity (workspaces, recents) compare by reference — a conservative
+// "changed" answer just means one extra write. The rebuilt openPaths/untitled
+// arrays compare by value; untouched tabs keep their exact string references,
+// so those item compares are O(1) reference hits.
+export const sessionSnapshotEqual = (a, b) => {
+  if (!a || !b) return false
+  if (
+    a.workspaces !== b.workspaces ||
+    a.theme !== b.theme ||
+    a.customTheme !== b.customTheme ||
+    a.lang !== b.lang ||
+    a.recents !== b.recents ||
+    a.sidebarOpen !== b.sidebarOpen ||
+    a.sidebarMode !== b.sidebarMode ||
+    a.sidebarWidth !== b.sidebarWidth ||
+    a.activePath !== b.activePath
+  ) {
+    return false
+  }
+  const ap = a.openPaths || []
+  const bp = b.openPaths || []
+  if (ap.length !== bp.length) return false
+  for (let i = 0; i < ap.length; i++) if (ap[i] !== bp[i]) return false
+  const au = a.untitled || []
+  const bu = b.untitled || []
+  if (au.length !== bu.length) return false
+  for (let i = 0; i < au.length; i++) {
+    if (au[i].title !== bu[i].title || au[i].content !== bu[i].content) return false
+  }
+  return true
+}

@@ -15,7 +15,8 @@ import {
   isValidName,
   isExistsError,
   isHeavyDoc,
-  buildSessionTabs
+  buildSessionTabs,
+  sessionSnapshotEqual
 } from '../src/renderer/src/paths.js'
 
 describe('isNewerVersion', () => {
@@ -169,5 +170,71 @@ describe('buildSessionTabs (what survives a restart)', () => {
   it('tolerates missing/empty input', () => {
     expect(buildSessionTabs(undefined)).toEqual({ openPaths: [], untitled: [] })
     expect(buildSessionTabs([])).toEqual({ openPaths: [], untitled: [] })
+  })
+})
+
+describe('sessionSnapshotEqual', () => {
+  const ws = ['C:/w']
+  const recents = [{ path: 'C:/w/a.md' }]
+  const base = () => ({
+    workspaces: ws,
+    workspace: ws[0],
+    theme: 'light',
+    customTheme: null,
+    lang: 'zh',
+    recents,
+    sidebarOpen: true,
+    sidebarMode: 'files',
+    sidebarWidth: 240,
+    openPaths: ['C:/w/a.md', 'C:/w/b.md'],
+    untitled: [{ title: 'Untitled', content: 'draft' }],
+    activePath: 'C:/w/a.md'
+  })
+
+  it('is true for value-equal snapshots with fresh openPaths/untitled arrays', () => {
+    expect(sessionSnapshotEqual(base(), base())).toBe(true)
+  })
+  it('is false when either side is missing', () => {
+    expect(sessionSnapshotEqual(null, base())).toBe(false)
+    expect(sessionSnapshotEqual(base(), null)).toBe(false)
+  })
+  it('detects each scalar field change', () => {
+    for (const [k, v] of [
+      ['theme', 'dark'],
+      ['customTheme', 'x.css'],
+      ['lang', 'en'],
+      ['sidebarOpen', false],
+      ['sidebarMode', 'outline'],
+      ['sidebarWidth', 300],
+      ['activePath', 'C:/w/b.md']
+    ]) {
+      const b = base()
+      b[k] = v
+      expect(sessionSnapshotEqual(base(), b), k).toBe(false)
+    }
+  })
+  it('compares workspaces/recents by reference (state identity)', () => {
+    const b = base()
+    b.workspaces = ['C:/w'] // same value, new identity → treated as changed
+    expect(sessionSnapshotEqual(base(), b)).toBe(false)
+    const c = base()
+    c.recents = [{ path: 'C:/w/a.md' }]
+    expect(sessionSnapshotEqual(base(), c)).toBe(false)
+  })
+  it('detects open-tab list changes', () => {
+    const b = base()
+    b.openPaths = ['C:/w/a.md']
+    expect(sessionSnapshotEqual(base(), b)).toBe(false)
+    const c = base()
+    c.openPaths = ['C:/w/a.md', 'C:/w/c.md']
+    expect(sessionSnapshotEqual(base(), c)).toBe(false)
+  })
+  it('detects untitled draft edits and count changes', () => {
+    const b = base()
+    b.untitled = [{ title: 'Untitled', content: 'draft EDITED' }]
+    expect(sessionSnapshotEqual(base(), b)).toBe(false)
+    const c = base()
+    c.untitled = []
+    expect(sessionSnapshotEqual(base(), c)).toBe(false)
   })
 })
