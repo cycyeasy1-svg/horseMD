@@ -1289,7 +1289,7 @@ export default function App() {
   const onCloseLeftTabs = useCallback((id) => closeSide(id, 'left'), [closeSide])
   const onCloseRightTabs = useCallback((id) => closeSide(id, 'right'), [closeSide])
 
-  const writeTab = useCallback(async (tab, targetPath) => {
+  const writeTab = useCallback(async (tab, targetPath, { notify = true } = {}) => {
     try {
       // Move pasted images (base64 blobs / global paste-folder files) into the
       // doc's ./assets and rewrite links to relative paths, so the saved file is
@@ -1328,6 +1328,10 @@ export default function App() {
           sticky: true,
           duration: 5000
         })
+      } else if (notify) {
+        // Manual saves (Ctrl+S / FAB / menu) get a brief confirmation; autosave
+        // stays silent so it doesn't toast every couple of seconds while typing.
+        fireToast(tRef.current('save.saved'))
       }
     } catch (e) {
       // Never fail silently — surface the real error so saving is debuggable.
@@ -1336,7 +1340,7 @@ export default function App() {
   }, [isMobile])
 
   const saveTab = useCallback(
-    async (id, forceDialog = false) => {
+    async (id, forceDialog = false, opts) => {
       const tab = tabs.find((t) => t.id === id)
       if (!tab) return
       let target = tab.path
@@ -1351,7 +1355,7 @@ export default function App() {
         target = await window.api.saveAs(tab.title.endsWith('.md') ? tab.title : tab.title + '.md')
         if (!target) return
       }
-      await writeTab(tab, target)
+      await writeTab(tab, target, opts)
     },
     [tabs, writeTab, isMobile]
   )
@@ -1376,7 +1380,7 @@ export default function App() {
       for (const t of dirty) {
         const live = tabsRef.current.find((x) => x.id === t.id)
         if (live && live.path && !live.conflict && live.content !== live.savedContent) {
-          saveTab(live.id)
+          saveTab(live.id, false, { notify: false })
         }
       }
     }, 2000)
