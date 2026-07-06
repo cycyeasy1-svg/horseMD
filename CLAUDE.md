@@ -45,6 +45,8 @@ src/renderer/src/
   components/SearchPanel.jsx  workspace full-text search view (streams from search:* IPC)
   components/editor-{html,images,copy,mermaid,tablebreak}.js  Editor helpers: HTML node view · img paths · rich-copy · mermaid widget · table-cell <br>
   components/editor-{math,codeblock-eager}.js  display-math normalization ($$x$$ → block form) · eager-mount code blocks (scroll-jump fix)
+  components/editor-mermaid-core.js  Milkdown-free mermaid render core (LRU cache, queue, retry) — shared verbatim by the VSCode extension webview; editor-mermaid.js keeps only the ProseMirror half and re-exports the keep API
+  i18n-strings.js       pure string table + translate() (no React) — i18n.jsx re-exports it; the VSCode extension bundles it directly (never hand-copy strings)
   {paths,find,ui,settings,customThemes,sourceFold}.js  pure helpers: session · find · toast · prefs (page width / font size / zoom) · custom-theme injection · source-pane folding
   {blocks,themes,i18n,onboarding}.{js,jsx}
   styles/app.css       all styles + theme variables
