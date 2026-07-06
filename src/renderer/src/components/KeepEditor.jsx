@@ -40,8 +40,9 @@ const COPY_WRAP =
  *   - initialContent → rawLines on mount. NO initial onChange (that would let the
  *     savedContent baseline be overwritten by a normalized form → spurious diff).
  *   - onChange(rawLines.join('\n'), false) fires ONLY when the user commits an edit.
- *   - onReady({ getMarkdown, getDocHTML, setBlock }) — save reads tab.content, but
- *     PDF export calls getDocHTML, and setBlock is a no-op (no block model here).
+ *   - onReady({ getMarkdown, getDocHTML, setBlock, clearAllFilters }) — save reads
+ *     tab.content, PDF export calls getDocHTML, setBlock is a no-op (no block model
+ *     here), and the status bar's filter badge calls clearAllFilters.
  *   - Remount (key includes reloadNonce) re-reads initialContent on external edits.
  */
 function KeepEditor({
@@ -491,22 +492,32 @@ function KeepEditor({
 
     // Tell the parent how many rows survive the active filters (status bar). Only
     // counts tables that actually have a filter applied; null = no filter active.
+    // shown/total are the sum across those tables; `tables` carries the per-table
+    // breakdown ({ti, shown, total}, ti = document order) for the badge tooltip.
     const reportFilter = () => {
       if (!onFilterChangeRef.current) return
-      let total = 0
-      let shown = 0
-      let anyActive = false
+      const tables = []
       host.querySelectorAll('table.km-table').forEach((table) => {
         const ti = table.getAttribute('data-ti')
         const cols = filterStateRef.current[ti]
         if (!cols || Object.keys(cols).length === 0) return
-        anyActive = true
+        let total = 0
+        let shown = 0
         table.querySelectorAll('tbody tr').forEach((tr) => {
           total++
           if (!tr.classList.contains('km-filtered')) shown++
         })
+        tables.push({ ti: parseInt(ti), shown, total })
       })
-      onFilterChangeRef.current(anyActive ? { shown, total } : null)
+      if (!tables.length) {
+        onFilterChangeRef.current(null)
+        return
+      }
+      onFilterChangeRef.current({
+        shown: tables.reduce((s, ft) => s + ft.shown, 0),
+        total: tables.reduce((s, ft) => s + ft.total, 0),
+        tables
+      })
     }
 
     // ── table cell editing: an enlarged floating editor anchored to the cell ──
@@ -948,6 +959,12 @@ function KeepEditor({
         fn: () => doDeleteColumn(ti, ci),
         disabled: !b || b.headers.length <= 1
       })
+      items.push('sep')
+      items.push({
+        label: T('keep.clearTableFilter'),
+        fn: () => clearTableFilter(ti),
+        disabled: !tableHasFilter(ti)
+      })
     }
 
     // ── rich-text copy & "open source here" (general right-click / Ctrl+C) ──
@@ -1077,14 +1094,24 @@ function KeepEditor({
       const ci = parseInt(btn.getAttribute('data-ci'))
       const table = host.querySelector('table[data-ti="' + ti + '"]')
       if (!table) return
+      filterStateRef.current[ti] = filterStateRef.current[ti] || {}
+      const tState = filterStateRef.current[ti]
+      const excluded = tState[ci] || new Set()
+      const cellVal = (tr, c) => {
+        const v = (tr.children[c]?.getAttribute('data-raw') || '').trim()
+        return v === '' ? '(空白)' : v
+      }
+      // Excel semantics: list only values from rows that survive the OTHER
+      // columns' filters — filtering B after A offers just A's survivors. This
+      // column's own filter is ignored so its currently-excluded values stay
+      // listed (otherwise they could never be re-checked).
       const values = new Set()
       table.querySelectorAll('tbody tr').forEach((tr) => {
-        const td = tr.children[ci]
-        const v = (td?.getAttribute('data-raw') || '').trim()
-        values.add(v === '' ? '(空白)' : v)
+        const hidden = Object.keys(tState).some(
+          (c) => parseInt(c) !== ci && tState[c].has(cellVal(tr, c))
+        )
+        if (!hidden) values.add(cellVal(tr, ci))
       })
-      filterStateRef.current[ti] = filterStateRef.current[ti] || {}
-      const excluded = filterStateRef.current[ti][ci] || new Set()
 
       const pop = document.createElement('div')
       pop.className = 'km-filter-pop'
@@ -1144,7 +1171,9 @@ function KeepEditor({
             .filter((cb) => cb.checked)
             .map((cb) => cb.dataset.v)
         )
-        const ex = new Set()
+        // Values whose rows are hidden by OTHER columns' filters aren't listed,
+        // so they can't be toggled here — carry their exclusion over unchanged.
+        const ex = new Set([...excluded].filter((v) => !values.has(v)))
         sorted.forEach((v) => {
           if (!keep.has(v)) ex.add(v)
         })
@@ -1190,6 +1219,43 @@ function KeepEditor({
         })
         tr.classList.toggle('km-filtered', hide)
       })
+    }
+    // A table's filters are active only if some column holds a non-empty excluded
+    // set (openFilterPop pre-creates an empty per-table object even on cancel).
+    const tableHasFilter = (ti) => {
+      const cols = filterStateRef.current[ti]
+      return !!cols && Object.keys(cols).length > 0
+    }
+    // Drop every filter on one table (right-click menu) / on the whole document
+    // (status-bar badge). Display-only, like the filters themselves: un-hide the
+    // rows, un-mark the ▼ buttons (live header + floating clone), refresh the
+    // shown/total badge. closePop() guards against a stale open dropdown whose
+    // checkbox state was captured before the clear.
+    const clearTableFilter = (ti) => {
+      if (!tableHasFilter(ti)) return
+      closePop()
+      delete filterStateRef.current[ti]
+      applyFilter(ti)
+      const sel = '.km-filter-btn[data-ti="' + ti + '"]'
+      host.querySelectorAll(sel).forEach((b) => b.classList.remove('active'))
+      document
+        .querySelectorAll('.km-float-header ' + sel)
+        .forEach((b) => b.classList.remove('active'))
+      reportFilter()
+      tableScrollRef.current?.update()
+    }
+    const clearAllFilters = () => {
+      const tis = Object.keys(filterStateRef.current).filter((ti) => tableHasFilter(ti))
+      if (!tis.length) return
+      closePop()
+      filterStateRef.current = {}
+      tis.forEach((ti) => applyFilter(parseInt(ti)))
+      host.querySelectorAll('.km-filter-btn').forEach((b) => b.classList.remove('active'))
+      document
+        .querySelectorAll('.km-float-header .km-filter-btn')
+        .forEach((b) => b.classList.remove('active'))
+      reportFilter()
+      tableScrollRef.current?.update()
     }
 
     // Classify a clicked link: external → system browser; in-app doc link or
@@ -1403,6 +1469,8 @@ function KeepEditor({
         return tmp.innerHTML
       },
       setBlock: () => {}, // no block model in keep mode
+      // Status-bar filter badge click: drop every table filter in the document.
+      clearAllFilters: () => clearAllFilters(),
       // Paint any not-yet-streamed chunks NOW. App calls this before an outline jump
       // or a find run, both of which query the live DOM and would otherwise miss a
       // heading / match still sitting in an un-appended chunk.

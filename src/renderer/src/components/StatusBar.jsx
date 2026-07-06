@@ -318,6 +318,7 @@ function StatusBar({
   onPickCustom,
   onRefreshThemes,
   filterInfo,
+  onClearFilters,
   onOpenSettings
 }) {
   const { t } = useI18n()
@@ -348,10 +349,31 @@ function StatusBar({
                 {dirty ? '● ' + t('status.modified') : '✓ ' + t('status.saved')}
               </span>
               {filterInfo && (
-                <span className="status-filter" title={t('status.filtered', filterInfo)}>
+                <button
+                  type="button"
+                  className="status-filter"
+                  // Multi-table: the label is an aggregate, so the tooltip breaks it
+                  // down per table (numbered in document order) above the clear hint.
+                  title={[
+                    ...(filterInfo.tables?.length > 1
+                      ? filterInfo.tables.map((ft) =>
+                          t('status.filteredTable', { i: ft.ti + 1, shown: ft.shown, total: ft.total })
+                        )
+                      : []),
+                    t('status.clearFilters')
+                  ].join('\n')}
+                  onClick={onClearFilters}
+                >
                   <Icon name="filter" size={12} />{' '}
-                  {t('status.filtered', filterInfo)}
-                </span>
+                  {filterInfo.tables?.length > 1
+                    ? t('status.filteredMulti', {
+                        n: filterInfo.tables.length,
+                        shown: filterInfo.shown,
+                        total: filterInfo.total
+                      })
+                    : t('status.filtered', filterInfo)}
+                  <Icon name="close" size={11} />
+                </button>
               )}
             </>
           )

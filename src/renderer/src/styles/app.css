@@ -2655,7 +2655,8 @@ body.hm-full-width .source-editor-wrap {
 .status-dot.mod { color: var(--accent); }
 .status-dot.ok { color: var(--faint); }
 /* Keep-mode table-filter badge: "筛选 N/M 条" — accent-tinted so it reads as an
-   active state, sits next to the saved/modified dot. */
+   active state, sits next to the saved/modified dot. A button: clicking it clears
+   every table filter in the document (the trailing ×). */
 .status-filter {
   display: inline-flex;
   align-items: center;
@@ -2663,7 +2664,11 @@ body.hm-full-width .source-editor-wrap {
   flex-shrink: 0;
   color: var(--accent);
   font-weight: 500;
+  font-size: inherit;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
 }
+.status-filter:hover { background: var(--hover); }
 .status-btn {
   display: flex;
   align-items: center;

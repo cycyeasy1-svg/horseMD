@@ -950,6 +950,19 @@ function buildTableItems(items, ti, ri, ci, isHeader) {
     fn: () => doDeleteColumn(ti, ci),
     disabled: !b || b.headers.length <= 1
   })
+  // Filter clearing lives here because the webview has no status bar to host a
+  // document-wide affordance (unlike the Electron app's filter badge).
+  items.push('sep')
+  items.push({
+    label: t('keep.clearTableFilter'),
+    fn: () => clearTableFilter(ti),
+    disabled: !tableHasFilter(ti)
+  })
+  items.push({
+    label: t('keep.clearAllFilters'),
+    fn: () => clearAllFilters(),
+    disabled: !anyFilterActive()
+  })
 }
 
 // ── rich copy ──
@@ -1056,14 +1069,24 @@ function openFilterPop(btn) {
   const ci = parseInt(btn.getAttribute('data-ci'))
   const table = host.querySelector('table[data-ti="' + ti + '"]')
   if (!table) return
+  filterState[ti] = filterState[ti] || {}
+  const tState = filterState[ti]
+  const excluded = tState[ci] || new Set()
+  const cellVal = (tr, c) => {
+    const v = (tr.children[c]?.getAttribute('data-raw') || '').trim()
+    return v === '' ? '(空白)' : v
+  }
+  // Excel semantics: list only values from rows that survive the OTHER columns'
+  // filters — filtering B after A offers just A's survivors. This column's own
+  // filter is ignored so its currently-excluded values stay listed (otherwise
+  // they could never be re-checked).
   const values = new Set()
   table.querySelectorAll('tbody tr').forEach((tr) => {
-    const td = tr.children[ci]
-    const v = (td?.getAttribute('data-raw') || '').trim()
-    values.add(v === '' ? '(空白)' : v)
+    const hidden = Object.keys(tState).some(
+      (c) => parseInt(c) !== ci && tState[c].has(cellVal(tr, c))
+    )
+    if (!hidden) values.add(cellVal(tr, ci))
   })
-  filterState[ti] = filterState[ti] || {}
-  const excluded = filterState[ti][ci] || new Set()
 
   const pop = document.createElement('div')
   pop.className = 'km-filter-pop'
@@ -1111,13 +1134,18 @@ function openFilterPop(btn) {
   })
   pop.querySelector('.cancel').onclick = closePop
   pop.querySelector('.ok').onclick = () => {
-    const ex = new Set()
-    const shown = new Set([...list.querySelectorAll('input')].map((cb) => cb.dataset.v))
+    // Excel-style (matches the app's KeepEditor): confirming keeps only the
+    // values that are BOTH visible (match the search) AND checked, and excludes
+    // every other listed value — so search-then-confirm filters the table down
+    // to the matching rows.
+    const keep = new Set(
+      [...list.querySelectorAll('input')].filter((cb) => cb.checked).map((cb) => cb.dataset.v)
+    )
+    // Values whose rows are hidden by OTHER columns' filters aren't listed, so
+    // they can't be toggled here — carry their exclusion over unchanged.
+    const ex = new Set([...excluded].filter((v) => !values.has(v)))
     sorted.forEach((v) => {
-      if (!shown.has(v) && excluded.has(v)) ex.add(v)
-    })
-    list.querySelectorAll('input').forEach((cb) => {
-      if (!cb.checked) ex.add(cb.dataset.v)
+      if (!keep.has(v)) ex.add(v)
     })
     if (ex.size > 0) filterState[ti][ci] = ex
     else delete filterState[ti][ci]
@@ -1155,6 +1183,41 @@ function applyFilter(ti) {
     })
     tr.classList.toggle('km-filtered', hide)
   })
+}
+// A table's filters are active only if some column holds a non-empty excluded set
+// (openFilterPop pre-creates an empty per-table object even on cancel).
+function tableHasFilter(ti) {
+  const cols = filterState[ti]
+  return !!cols && Object.keys(cols).length > 0
+}
+function anyFilterActive() {
+  return Object.keys(filterState).some((ti) => tableHasFilter(ti))
+}
+// Drop every filter on one table / on the whole document (context-menu entries).
+// Display-only, like the filters themselves: un-hide the rows and un-mark the ▼
+// buttons (live header + floating clone). closePop() guards against a stale open
+// dropdown whose checkbox state was captured before the clear.
+function clearTableFilter(ti) {
+  if (!tableHasFilter(ti)) return
+  closePop()
+  delete filterState[ti]
+  applyFilter(ti)
+  const sel = '.km-filter-btn[data-ti="' + ti + '"]'
+  host.querySelectorAll(sel).forEach((b) => b.classList.remove('active'))
+  document.querySelectorAll('.km-float-header ' + sel).forEach((b) => b.classList.remove('active'))
+  tableScroll?.update()
+}
+function clearAllFilters() {
+  const tis = Object.keys(filterState).filter((ti) => tableHasFilter(ti))
+  if (!tis.length) return
+  closePop()
+  filterState = {}
+  tis.forEach((ti) => applyFilter(parseInt(ti)))
+  host.querySelectorAll('.km-filter-btn').forEach((b) => b.classList.remove('active'))
+  document
+    .querySelectorAll('.km-float-header .km-filter-btn')
+    .forEach((b) => b.classList.remove('active'))
+  tableScroll?.update()
 }
 
 // ── settings panel (theme · language · layout) ──

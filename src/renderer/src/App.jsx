@@ -3412,6 +3412,9 @@ export default function App() {
         zoom={settings.zoom}
         onSetZoom={onSetZoom}
         filterInfo={activeTab ? keepFilters[activeTab.id] : null}
+        onClearFilters={() => {
+          if (activeTab) editorApis.current[activeTab.id]?.clearAllFilters?.()
+        }}
         onOpenSettings={() => setSettingsOpen(true)}
       />
 
